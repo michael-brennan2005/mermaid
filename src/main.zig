@@ -14,15 +14,19 @@
 // It’s not called ‘The Wheel.’ It’s called ‘The Carousel.’
 
 const std = @import("std");
-const lib = @import("teddy_lib");
+
+pub const Tokenizer = @import("./frontend.zig").Tokenizer;
+pub const Parser = @import("./frontend.zig").Parser;
+pub const RegAlloc = @import("./frontend.zig").RegAlloc;
+pub const Types = @import("./frontend.zig").Types;
 
 pub fn main() !void {
     var gpa = std.heap.DebugAllocator(.{}){};
     const alloc = gpa.allocator();
 
-    const tokens = try lib.Tokenizer.do(alloc, "x+y+y+0.5");
-    const ssa = try lib.Parser.do(alloc, tokens);
-    const insts = try lib.RegAlloc.do(alloc, ssa);
+    const tokens = try Tokenizer.do(alloc, "x+y+y+0.5");
+    const ssa = try Parser.do(alloc, tokens);
+    const insts = try RegAlloc.do(alloc, ssa);
 
     std.debug.print("Tokens:\n", .{});
     for (tokens) |tok| {
@@ -46,7 +50,7 @@ pub fn main() !void {
 }
 
 const Debug = struct {
-    pub fn prettyPrintToken(tok: lib.Types.Token) void {
+    pub fn prettyPrintToken(tok: Types.Token) void {
         switch (tok) {
             .val => |val| {
                 std.debug.print("Val({d})", .{val});
@@ -75,7 +79,7 @@ const Debug = struct {
         }
     }
 
-    pub fn prettyPrintSSA(inst: lib.Types.SSA, prefix: u8) void {
+    pub fn prettyPrintSSA(inst: Types.SSA, prefix: u8) void {
         switch (inst) {
             .op => |op| {
                 std.debug.print("{s} {c}{d} {c}{d}", .{ @tagName(op.op), prefix, op.lhs, prefix, op.rhs });

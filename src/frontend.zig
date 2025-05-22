@@ -1,10 +1,41 @@
 // Text -> Register allocated instructions
 const std = @import("std");
 
-// Text -> Tokens
-pub const Tokenizer = struct {
-    buffer: [:0]const u8,
-    index: usize,
+// Allow SSA and RegAlloc to share types (and eventually tokenizer)
+pub const Types = struct {
+    // Input's are indices to other SSA instructions
+    pub const SSA = union(enum) {
+        constant: f32,
+        arg: Arg,
+        op: struct {
+            op: Op,
+            lhs: Input,
+            rhs: Input,
+        },
+
+        // Needed for instruction caching in parser
+        pub const Context = struct {
+            pub fn hash(self: @This(), key: Types.SSA) u64 {
+                _ = self;
+
+                return std.hash.Wyhash.hash(0, std.mem.asBytes(&key));
+            }
+
+            pub const eql = std.hash_map.getAutoEqlFn(Types.SSA, @This());
+        };
+    };
+
+    // Input's are indices to registers; that goes for the lhs and rhs of ssa too
+    pub const Inst = struct {
+        out: Input,
+        ssa: SSA,
+    };
+
+    pub const Op = enum { add, sub, mul, div };
+    pub const Func1 = enum { sqrt, sin, cos, asin, acos, atan, exp, log, abs };
+    pub const Func2 = enum { min, max };
+    pub const Arg = enum { x, y };
+    pub const Input = usize;
 
     pub const Token = union(enum) {
         val: f32,
@@ -17,22 +48,30 @@ pub const Tokenizer = struct {
         left_paren,
         right_paren,
         comma,
-
-        pub const Arg = enum { X, Y, Z };
-        pub const Op = enum { Add, Sub, Mul, Div };
-        pub const Func1 = enum { Sqrt, Sin, Cos, Asin, Acos, Atan, Exp, Log, Abs };
-        pub const Func2 = enum { Min, Max };
     };
+};
 
-    pub fn init(buffer: [:0]const u8) Tokenizer {
-        return .{ .buffer = buffer, .index = 0 };
+// Text -> Tokens
+pub const Tokenizer = struct {
+    buffer: [:0]const u8,
+    index: usize,
+
+    pub fn do(gpa: std.mem.Allocator, buffer: [:0]const u8) ![]Types.Token {
+        var tokenizer = Tokenizer{ .buffer = buffer, .index = 0 };
+
+        var arr = std.ArrayList(Types.Token).init(gpa);
+
+        while (try tokenizer.next()) |tok| {
+            try arr.append(tok);
+        }
+
+        return arr.toOwnedSlice();
     }
 
     // TODO: support numbers in form of ".32"
-    // TODO: better name for identifier
     const State = enum { start, int, float, identifier };
 
-    pub fn next(self: *Tokenizer) !?Token {
+    pub fn next(self: *Tokenizer) !?Types.Token {
         var start: usize = 0;
         state: switch (State.start) {
             .start => switch (self.buffer[self.index]) {
@@ -49,12 +88,12 @@ pub const Tokenizer = struct {
                 },
                 '+', '-', '*', '/' => {
                     self.index += 1;
-                    return Token{
+                    return Types.Token{
                         .op = switch (self.buffer[self.index - 1]) {
-                            '+' => .Add,
-                            '-' => .Sub,
-                            '*' => .Mul,
-                            '/' => .Div,
+                            '+' => .add,
+                            '-' => .sub,
+                            '*' => .mul,
+                            '/' => .div,
                             else => unreachable,
                         },
                     };
@@ -97,7 +136,7 @@ pub const Tokenizer = struct {
                             @panic("TODO error: int is misformed (can this even be reached?)");
                         };
 
-                        return Token{
+                        return Types.Token{
                             .val = @floatFromInt(val),
                         };
                     },
@@ -114,7 +153,7 @@ pub const Tokenizer = struct {
                             @panic("TODO error: float is misformed (can this even be reached?)");
                         };
 
-                        return Token{
+                        return Types.Token{
                             .val = val,
                         };
                     },
@@ -138,32 +177,22 @@ pub const Tokenizer = struct {
         }
     }
 
-    pub fn collect(self: *Tokenizer, gpa: std.mem.Allocator) ![]Token {
-        var arr = std.ArrayList(Token).init(gpa);
-
-        while (try self.next()) |tok| {
-            try arr.append(tok);
-        }
-
-        return arr.toOwnedSlice();
-    }
-
-    fn getIdentifierToken(buf: []const u8) ?Token {
-        const map = [_]struct { []const u8, Token }{
-            .{ "x", Token{ .arg = Token.Arg.X } },
-            .{ "y", Token{ .arg = Token.Arg.Y } },
-            .{ "z", Token{ .arg = Token.Arg.Z } },
-            .{ "sqrt", Token{ .func1 = Token.Func1.Sqrt } },
-            .{ "sin", Token{ .func1 = Token.Func1.Sin } },
-            .{ "cos", Token{ .func1 = Token.Func1.Cos } },
-            .{ "asin", Token{ .func1 = Token.Func1.Asin } },
-            .{ "acos", Token{ .func1 = Token.Func1.Acos } },
-            .{ "atan", Token{ .func1 = Token.Func1.Atan } },
-            .{ "exp", Token{ .func1 = Token.Func1.Exp } },
-            .{ "log", Token{ .func1 = Token.Func1.Log } },
-            .{ "abs", Token{ .func1 = Token.Func1.Abs } },
-            .{ "min", Token{ .func2 = Token.Func2.Min } },
-            .{ "max", Token{ .func2 = Token.Func2.Max } },
+    fn getIdentifierToken(buf: []const u8) ?Types.Token {
+        const map = [_]struct { []const u8, Types.Token }{
+            .{ "x", Types.Token{ .arg = Types.Arg.x } },
+            .{ "y", Types.Token{ .arg = Types.Arg.y } },
+            // .{ "z", Types.Token{ .arg = Types.Arg.z } },
+            .{ "sqrt", Types.Token{ .func1 = Types.Func1.sqrt } },
+            .{ "sin", Types.Token{ .func1 = Types.Func1.sin } },
+            .{ "cos", Types.Token{ .func1 = Types.Func1.cos } },
+            .{ "asin", Types.Token{ .func1 = Types.Func1.asin } },
+            .{ "acos", Types.Token{ .func1 = Types.Func1.acos } },
+            .{ "atan", Types.Token{ .func1 = Types.Func1.atan } },
+            .{ "exp", Types.Token{ .func1 = Types.Func1.exp } },
+            .{ "log", Types.Token{ .func1 = Types.Func1.log } },
+            .{ "abs", Types.Token{ .func1 = Types.Func1.abs } },
+            .{ "min", Types.Token{ .func2 = Types.Func2.min } },
+            .{ "max", Types.Token{ .func2 = Types.Func2.max } },
         };
 
         for (map) |elem| {
@@ -179,68 +208,57 @@ pub const Tokenizer = struct {
 // Tokens -> SSA
 pub const Parser = struct {
     index: usize,
-    toks: []Tokenizer.Token,
-    insts: std.ArrayList(Inst),
+    toks: []Types.Token,
+    insts: std.ArrayList(Types.SSA),
+    // Keeping a cache allows for subexpression elimination
+    cache: std.HashMap(Types.SSA, usize, Types.SSA.Context, 80),
 
-    pub const Inst = struct {
-        op: Op,
-        lhs: Input,
-        rhs: Input,
-
-        pub const Op = enum { Add };
-
-        pub const Input = union(enum) {
-            idx: usize,
-            arg: Tokenizer.Token.Arg,
-            imm: f32,
-        };
-    };
-
-    pub fn init(gpa: std.mem.Allocator, toks: []Tokenizer.Token) Parser {
-        return Parser{
+    pub fn do(gpa: std.mem.Allocator, toks: []Types.Token) ![]Types.SSA {
+        var parser = Parser{
             .index = 0,
-            .insts = std.ArrayList(Inst).init(gpa),
+            .cache = std.HashMap(Types.SSA, usize, Types.SSA.Context, 80).init(gpa),
+            .insts = std.ArrayList(Types.SSA).init(gpa),
             .toks = toks,
         };
+        defer parser.cache.deinit();
+
+        try parser.parse();
+        return parser.insts.toOwnedSlice();
     }
 
-    pub fn parse(self: *Parser) !void {
+    fn parse(self: *Parser) !void {
         _ = try self.parseExpr();
     }
 
-    pub fn parseExpr(self: *Parser) !Inst.Input {
+    fn parseExpr(self: *Parser) !Types.Input {
         const lhs = try self.parseFactor();
 
-        if (self.advanceIfOp(Tokenizer.Token.Op.Add)) {
+        if (self.advanceIfOp(Types.Op.add)) {
             const rhs = try self.parseExpr();
 
-            try self.insts.append(Inst{
-                .op = .Add,
+            return try self.addInst(Types.SSA{ .op = .{
+                .op = .add,
                 .lhs = lhs,
                 .rhs = rhs,
-            });
-
-            return Inst.Input{
-                .idx = self.insts.items.len - 1,
-            };
+            } });
         } else {
             return lhs;
         }
     }
 
-    pub fn parseFactor(self: *Parser) !Inst.Input {
+    fn parseFactor(self: *Parser) !Types.Input {
         if (self.advanceIfNumber()) |val| {
-            return Inst.Input{ .imm = val };
+            return try self.addInst(Types.SSA{ .constant = val });
         }
 
         if (self.advanceIfArg()) |arg| {
-            return Inst.Input{ .arg = arg };
+            return try self.addInst(Types.SSA{ .arg = arg });
         }
 
         @panic("TODO error: we get to this point");
     }
 
-    pub fn advanceIfOp(self: *Parser, op: Tokenizer.Token.Op) bool {
+    fn advanceIfOp(self: *Parser, op: Types.Op) bool {
         if (self.index >= self.toks.len) {
             return false;
         }
@@ -258,7 +276,7 @@ pub const Parser = struct {
         };
     }
 
-    pub fn advanceIfNumber(self: *Parser) ?f32 {
+    fn advanceIfNumber(self: *Parser) ?f32 {
         if (self.index >= self.toks.len) {
             return null;
         }
@@ -272,7 +290,7 @@ pub const Parser = struct {
         };
     }
 
-    pub fn advanceIfArg(self: *Parser) ?Tokenizer.Token.Arg {
+    fn advanceIfArg(self: *Parser) ?Types.Arg {
         if (self.index >= self.toks.len) {
             return null;
         }
@@ -286,90 +304,76 @@ pub const Parser = struct {
         };
     }
 
-    pub fn advance(self: *Parser) Tokenizer.Token {
+    fn advance(self: *Parser) Types.Token {
         self.index += 1;
         return self.toks[self.index - 1];
+    }
+
+    fn addInst(self: *Parser, inst: Types.SSA) !Types.Input {
+        if (self.cache.get(inst)) |idx| {
+            return idx;
+        } else {
+            try self.insts.append(inst);
+            const i = self.insts.items.len - 1;
+            try self.cache.put(inst, i);
+            return i;
+        }
     }
 };
 
 // SSA -> Register allocated
 pub const RegAlloc = struct {
-    insts: []Parser.Inst,
-    output: std.ArrayList(Inst),
+    ssa: []Types.SSA,
+    output: []Types.Inst,
 
     // SSA -> Register
     active: std.AutoHashMap(usize, usize),
     free: std.ArrayList(usize),
     r: usize,
 
-    pub const Inst = struct {
-        op: Op,
-        lhs: Input,
-        rhs: Input,
-        out: usize,
-
-        pub const Op = enum { Add };
-
-        pub const Input = union(enum) {
-            idx: usize,
-            arg: Tokenizer.Token.Arg,
-            imm: f32,
-        };
-    };
-
-    pub fn init(gpa: std.mem.Allocator, insts: []Parser.Inst) !RegAlloc {
-        return RegAlloc{
-            .insts = insts,
-            .output = std.ArrayList(Inst).init(gpa),
+    pub fn do(gpa: std.mem.Allocator, ssa: []Types.SSA) ![]Types.Inst {
+        var regAlloc = RegAlloc{
+            .ssa = ssa,
+            .output = try gpa.alloc(Types.Inst, ssa.len),
             .active = std.AutoHashMap(usize, usize).init(gpa),
             .free = std.ArrayList(usize).init(gpa),
             .r = 0,
         };
-    }
+        defer regAlloc.active.deinit();
+        defer regAlloc.free.deinit();
 
-    pub fn do(self: *RegAlloc) !void {
-        var i: usize = self.insts.len;
+        var i: usize = regAlloc.ssa.len;
         while (i > 0) {
             i -= 1;
 
-            const ssa = self.insts[i];
+            const elem = regAlloc.ssa[i];
 
-            var inst = Inst{
-                .op = .Add,
-                .lhs = Inst.Input{ .imm = -1.0 },
-                .rhs = Inst.Input{ .imm = -1.0 },
+            var inst = Types.Inst{
+                .ssa = elem,
                 .out = 0,
             };
 
-            inst.out = try self.bind(i);
-
-            switch (ssa.lhs) {
-                .idx => |idx| {
-                    inst.lhs = Inst.Input{
-                        .idx = try self.bind(idx),
-                    };
+            inst.out = try regAlloc.bind(i);
+            try regAlloc.unbind(i);
+            switch (inst.ssa) {
+                .op => |op| {
+                    inst.ssa.op.lhs = try regAlloc.bind(op.lhs);
+                    inst.ssa.op.rhs = try regAlloc.bind(op.rhs);
                 },
                 else => {},
             }
 
-            switch (ssa.rhs) {
-                .idx => |idx| {
-                    inst.rhs = Inst.Input{
-                        .idx = try self.bind(idx),
-                    };
-                },
-                else => {},
-            }
-
-            try self.unbind(i);
-
-            try self.output.append(inst);
+            regAlloc.output[i] = inst;
         }
+
+        return regAlloc.output;
     }
 
     // Returns register
     fn bind(self: *RegAlloc, inst: usize) !usize {
-        if (self.free.items.len == 0) {
+        if (self.active.get(inst)) |r| {
+            return r;
+        } else if (self.free.items.len == 0) {
             self.r += 1;
 
             try self.active.put(inst, self.r - 1);

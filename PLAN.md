@@ -25,33 +25,32 @@ Stages:
 - ????
 - Profit!
 
-# 5-21-2025
+# BIG TODO LIST
 
+TODO (DONE): better name for arg?
+    - Arg is fine
+TODO (DONE): centralize the op and arg types
+TODO (DONE): is there a hash set in zig
+    - There is not
+TODO (DONE): naming conventions
+TODO (DONE): consts and vars should be instructions
+
+TODO: we should try and comapct these to single functions instead of OOP vibe we got going on
+TODO: Eliminate tokenization, one text -> SSA pass
+
+# 5-21-2025
 // FOR NOW:
 // expr: factor "+" expr | factor
 // factor: number | var
 
-TODO: better name for arg?
-TODO: centralize the op and arg types
-TODO: naming conventions
-
 # 5-22-2025
 Intervals are already ordered by start point (their SSA index)
 
-TODO: we should try and comapct these to single functions instead of OOP vibe we got going on
-TODO: is there a hash set in zig
-TODO: consts and vars should be instructions
 
-LinearScanRegisterAllocation
-    active ← {}
-    for each live interval i, in order of increasing start point do
-        ExpireOldIntervals(i)
-        register[i] ← a register removed from pool of free registers
-        add i to active, sorted by increasing end point
 
-ExpireOldIntervals(i)
-    for each interval j in active, in order of increasing end point do
-        if endpoint[j] ≥ startpoint[i] then
-            return 
-        remove j from active
-        add register[j] to pool of free registers
+FOR FUTURE: Eliminate tokenization, one text -> SSA pass
+FOR FUTURE: subexpression elimination w hashmap
+
+R0: X
+R1: X + Y + Y + 0.5
+R2: Y + 0.5

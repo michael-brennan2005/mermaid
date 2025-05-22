@@ -20,38 +20,33 @@ pub fn main() !void {
     var gpa = std.heap.DebugAllocator(.{}){};
     const alloc = gpa.allocator();
 
-    var tokenizer = lib.Tokenizer.init("x+x+0.5+y");
-    const toks = try tokenizer.collect(alloc);
+    const tokens = try lib.Tokenizer.do(alloc, "x+y+y+0.5");
+    const ssa = try lib.Parser.do(alloc, tokens);
+    const insts = try lib.RegAlloc.do(alloc, ssa);
 
     std.debug.print("Tokens:\n", .{});
-    for (toks) |tok| {
+    for (tokens) |tok| {
         Debug.prettyPrintToken(tok);
         std.debug.print("\n", .{});
     }
 
-    var parser = lib.Parser.init(alloc, toks);
-    try parser.parse();
-
     std.debug.print("\nSSA:\n", .{});
-    for (parser.insts.items, 0..) |inst, i| {
+    for (ssa, 0..) |inst, i| {
         std.debug.print("${d} = ", .{i});
-        Debug.prettyPrintSSA(inst);
+        Debug.prettyPrintSSA(inst, '$');
         std.debug.print("\n", .{});
     }
 
-    var regAlloc = try lib.RegAlloc.init(alloc, try parser.insts.toOwnedSlice());
-    try regAlloc.do();
-
     std.debug.print("\nReg alloc:\n", .{});
-    for (regAlloc.output.items) |inst| {
-        std.debug.print("${d} = ", .{inst.out});
-        Debug.prettyPrintRegAlloc(inst);
+    for (insts) |inst| {
+        std.debug.print("r{d} = ", .{inst.out});
+        Debug.prettyPrintSSA(inst.ssa, 'r');
         std.debug.print("\n", .{});
     }
 }
 
 const Debug = struct {
-    pub fn prettyPrintToken(tok: lib.Tokenizer.Token) void {
+    pub fn prettyPrintToken(tok: lib.Types.Token) void {
         switch (tok) {
             .val => |val| {
                 std.debug.print("Val({d})", .{val});
@@ -80,33 +75,17 @@ const Debug = struct {
         }
     }
 
-    pub fn prettyPrintSSA(inst: lib.Parser.Inst) void {
-        std.debug.print("{s} ", .{@tagName(inst.op)});
-        prettyPrintInput(inst.lhs);
-        std.debug.print(" ", .{});
-        prettyPrintInput(inst.rhs);
-    }
-
-    fn prettyPrintInput(input: lib.Parser.Inst.Input) void {
-        switch (input) {
-            .idx => |idx| std.debug.print("${d}", .{idx}),
-            .arg => |arg| std.debug.print("{s}", .{@tagName(arg)}),
-            .imm => |imm| std.debug.print("{d}", .{imm}),
-        }
-    }
-
-    pub fn prettyPrintRegAlloc(inst: lib.RegAlloc.Inst) void {
-        std.debug.print("{s} ", .{@tagName(inst.op)});
-        prettyPrintInput2(inst.lhs);
-        std.debug.print(" ", .{});
-        prettyPrintInput2(inst.rhs);
-    }
-
-    fn prettyPrintInput2(input: lib.RegAlloc.Inst.Input) void {
-        switch (input) {
-            .idx => |idx| std.debug.print("${d}", .{idx}),
-            .arg => |arg| std.debug.print("{s}", .{@tagName(arg)}),
-            .imm => |imm| std.debug.print("{d}", .{imm}),
+    pub fn prettyPrintSSA(inst: lib.Types.SSA, prefix: u8) void {
+        switch (inst) {
+            .op => |op| {
+                std.debug.print("{s} {c}{d} {c}{d}", .{ @tagName(op.op), prefix, op.lhs, prefix, op.rhs });
+            },
+            .constant => |constant| {
+                std.debug.print("const {d}", .{constant});
+            },
+            .arg => |arg| {
+                std.debug.print("arg {s}", .{@tagName(arg)});
+            },
         }
     }
 };

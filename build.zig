@@ -18,12 +18,9 @@ pub fn build(b: *std.Build) void {
         .root_module = exe_mod,
     });
     b.installArtifact(exe);
-    @import("zgpu").addLibraryPathsTo(exe);
-    const zgpu = b.dependency("zgpu", .{
-        .target = target,
-    });
-    exe.root_module.addImport("zgpu", zgpu.module("root"));
-    exe.linkLibrary(zgpu.artifact("zdawn"));
+
+    const wgpu_native_dep = b.dependency("wgpu_native_zig", .{});
+    exe.root_module.addImport("wgpu", wgpu_native_dep.module("wgpu"));
 
     const run_cmd = b.addRunArtifact(exe);
     run_cmd.step.dependOn(b.getInstallStep());

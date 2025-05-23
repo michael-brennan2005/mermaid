@@ -4,18 +4,9 @@
     .fingerprint = 0xa11eb2e4cb513e45, // Changing this has security and trust implications.
     .minimum_zig_version = "0.14.0",
     .dependencies = .{
-        .system_sdk = .{
-            .url = "git+https://github.com/zig-gamedev/system_sdk/#bf49d627a191e339f70e72668c8333717fb969b0",
-            .hash = "system_sdk-0.3.0-dev-AAAAAGVRPwLPixTI18phIkWJHrdgjGT0_cvurZwGc1Hf",
-        },
-        .zgpu = .{
-            .url = "git+https://github.com/zig-gamedev/zgpu#d860e2b4a333cacffb168fab49a233c5d2f1bca2",
-            .hash = "zgpu-0.12.0-dev-nqFT5EKgCADkhwAf97_pfSOmPWEguKmljSECs9ihpFS7",
-        },
-        .dawn_x86_64_windows_gnu = .{
-            .url = "https://github.com/michal-z/webgpu_dawn-x86_64-windows-gnu/archive/d3a68014e6b6b53fd330a0ccba99e4dcfffddae5.tar.gz",
-            .hash = "1220f9448cde02ef3cd51bde2e0850d4489daa0541571d748154e89c6eb46c76a267",
-            .lazy = true,
+        .wgpu_native_zig = .{
+            .url = "https://github.com/bronter/wgpu_native_zig/archive/refs/tags/v5.1.0.tar.gz",
+            .hash = "wgpu_native_zig-5.1.0-B9jeDPmZAgAqCtg1bpt30WiO4lATvvQ9xKGTwfT2mzb0",
         },
     },
     .paths = .{

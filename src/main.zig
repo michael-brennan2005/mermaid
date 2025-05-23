@@ -14,19 +14,64 @@
 // It’s not called ‘The Wheel.’ It’s called ‘The Carousel.’
 
 const std = @import("std");
+const wgpu = @import("wgpu");
 
 pub const Tokenizer = @import("./frontend.zig").Tokenizer;
 pub const Parser = @import("./frontend.zig").Parser;
 pub const RegAlloc = @import("./frontend.zig").RegAlloc;
 pub const Types = @import("./frontend.zig").Types;
 
+pub const Renderer = @import("./backend.zig").Renderer;
+
 pub fn main() !void {
     var gpa = std.heap.DebugAllocator(.{}){};
     const alloc = gpa.allocator();
 
-    const tokens = try Tokenizer.do(alloc, "x+y+y+0.5");
-    const ssa = try Parser.do(alloc, tokens);
-    const insts = try RegAlloc.do(alloc, ssa);
+    const stdin = std.io.getStdIn().reader();
+    const stdout = std.io.getStdOut().writer();
+
+    const renderer = try Renderer.init(.{});
+    _ = renderer;
+
+    while (true) {
+        try stdout.print("eq > ", .{});
+
+        const buf = try stdin.readUntilDelimiterAlloc(alloc, '\n', 1024);
+        const buf_terminated = try alloc.dupeZ(u8, buf);
+        defer alloc.free(buf);
+        defer alloc.free(buf_terminated);
+
+        _ = try compile(alloc, buf_terminated);
+    }
+    // const instance = wgpu.Instance.create(null).?;
+    // defer instance.release();
+
+    // const adapter_request = instance.requestAdapterSync(&wgpu.RequestAdapterOptions{});
+    // const adapter = switch (adapter_request.status) {
+    //     .success => adapter_request.adapter.?,
+    //     else => return error.NoAdapter,
+    // };
+    // defer adapter.release();
+
+    // const device_request = adapter.requestDeviceSync(&wgpu.DeviceDescriptor{
+    //     .required_limits = null,
+    // });
+    // const device = switch (device_request.status) {
+    //     .success => device_request.device.?,
+    //     else => return error.NoDevice,
+    // };
+    // defer device.release();
+
+    // const queue = device.getQueue().?;
+    // defer queue.release();
+
+}
+
+// Text -> register allocated instructions
+pub fn compile(gpa: std.mem.Allocator, text: [:0]const u8) ![]Types.Inst {
+    const tokens = try Tokenizer.do(gpa, text);
+    const ssa = try Parser.do(gpa, tokens);
+    const insts = try RegAlloc.do(gpa, ssa);
 
     std.debug.print("Tokens:\n", .{});
     for (tokens) |tok| {
@@ -47,6 +92,8 @@ pub fn main() !void {
         Debug.prettyPrintSSA(inst.ssa, 'r');
         std.debug.print("\n", .{});
     }
+
+    return insts;
 }
 
 const Debug = struct {

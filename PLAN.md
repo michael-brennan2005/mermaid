@@ -1,4 +1,4 @@
-# General
+# NOTES
 FINAL grammar:
 expr: term "+" expr | term "-" expr | term
 term: factor "*"" term | factor "/" term | factor
@@ -34,23 +34,23 @@ TODO (DONE): is there a hash set in zig
     - There is not
 TODO (DONE): naming conventions
 TODO (DONE): consts and vars should be instructions
-
-TODO: we should try and comapct these to single functions instead of OOP vibe we got going on
-TODO: Eliminate tokenization, one text -> SSA pass
-
-# 5-21-2025
-// FOR NOW:
-// expr: factor "+" expr | factor
-// factor: number | var
-
-# 5-22-2025
-Intervals are already ordered by start point (their SSA index)
-
-
+TODO (DONE): we should try and comapct these to single functions instead of OOP vibe we got going on
 
 FOR FUTURE: Eliminate tokenization, one text -> SSA pass
+FOR FUTURE: eliminate instruction encoding pass
+FOR FUTURE: Look into immediate constant fixing 
 FOR FUTURE: subexpression elimination w hashmap
 
-R0: X
-R1: X + Y + Y + 0.5
-R2: Y + 0.5
+# Strategic planning
+    - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
+        - This means our bindgroup can just be the output image and encoded tape
+    - KISS: Do webgpu in JS-land, profile & rewrite later usign Zig and making compatibility layer
+    - WASM support is a bitch so let's just focus on that, better now than later having to rewrite a bunch of native code -> wasm. Also its insanely fast compilation I enjoy it
+        - Fun toolchain exploring!
+    - Clause encoding
+        - Fix everything at 8 bytes (so lots of padding, maybe a TODO: thing in future)
+        - Opcode (1 byte)
+        - Output slot (1 byte)
+        - Two input slots (1 byte, 1 byte)
+        - OR immediate constant (4 bytes).
+

@@ -1,41 +1,62 @@
 const std = @import("std");
-const wgpu = @import("wgpu");
+const Types = @import("frontend.zig").Types;
 
-pub const Renderer = struct {
-    config: Config,
-
-    pub const Config = struct {
-        image_width: usize = 1024,
-        image_height: usize = 1024,
-        image_subdivisions: usize = 64,
+pub const InstEncoding = struct {
+    pub const Opcode = enum(u8) {
+        constant = 0, // reg <- imm
+        x = 1, // reg <- x
+        y = 2, // reg <- y
+        add = 2, // reg <- reg + reg
     };
 
-    pub fn init(config: Config) !Renderer {
-        // Init device
-        std.debug.print("Creating instance...\n", .{});
+    pub const Arg = enum(u8) { x = 0, y = 1 };
 
-        const instance = wgpu.Instance.create(null).?;
-        defer instance.release();
+    pub fn encode(gpa: std.mem.Allocator, insts: []Types.Inst) ![]u8 {
+        const arr = std.ArrayList(u8).init(gpa);
+        const writer = arr.writer();
 
-        std.debug.print("Creating adapter...\n", .{});
-        const adapter_request = instance.requestAdapterSync(&wgpu.RequestAdapterOptions{});
-        const adapter = switch (adapter_request.status) {
-            .success => adapter_request.adapter.?,
-            else => {
-                std.debug.print("Adapter message: {s}\n", .{adapter_request.message.?});
-                @panic("Failed to make adapter");
-            },
-        };
-        defer adapter.release();
+        for (insts) |inst| {
+            switch (inst.ssa) {
+                .constant => |constant| {
+                    try writer.writeByte(Opcode.constant);
+                    try writer.writeByte(inst.out);
+                    try writer.writeByte(0x0);
+                    try writer.writeByte(0x0);
+                    try writer.write(constant);
+                },
+                .arg => |arg| {
+                    switch (arg) {
+                        .x => {
+                            try writer.writeByte(Opcode.x);
+                        },
+                        .y => {
+                            try writer.writeByte(Opcode.y);
+                        },
+                    }
 
-        // Init bind group layout
-
-        // Init buffers
-
-        // Init bind group
-
-        return Renderer{
-            .config = config,
-        };
+                    try writer.writeByte(inst.out);
+                    try writer.writeByte(0x0);
+                    try writer.writeByte(0x0);
+                    try writer.writeByte(0x0);
+                    try writer.writeByte(0x0);
+                    try writer.writeByte(0x0);
+                    try writer.writeByte(0x0);
+                },
+                .op => |op| {
+                    switch (op) {
+                        .add => {
+                            try writer.writeByte(Opcode.add);
+                        },
+                    }
+                    try writer.writeByte(inst.out);
+                    try writer.writeByte(op.lhs);
+                    try writer.writeByte(op.rhs);
+                    try writer.writeByte(0x0);
+                    try writer.writeByte(0x0);
+                    try writer.writeByte(0x0);
+                    try writer.writeByte(0x0);
+                },
+            }
+        }
     }
 };

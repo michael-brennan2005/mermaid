@@ -1,43 +1,42 @@
 const std = @import("std");
+const demo_webserver = @import("demo_webserver");
 
-// Although this function looks imperative, note that its job is to
-// declaratively construct a build graph that will be executed by an external
-// runner.
 pub fn build(b: *std.Build) void {
-    const target = b.standardTargetOptions(.{});
     const optimize = b.standardOptimizeOption(.{});
+    const dir = std.Build.InstallDir.prefix;
 
-    const exe_mod = b.createModule(.{
-        .root_source_file = b.path("src/main.zig"),
-        .target = target,
-        .optimize = optimize,
-    });
+    // const zjb = b.dependency("javascript_bridge", .{});
 
     const exe = b.addExecutable(.{
         .name = "teddy",
-        .root_module = exe_mod,
+        .root_module = b.createModule(.{
+            .root_source_file = b.path("src/main.zig"),
+            .target = b.resolveTargetQuery(.{ .cpu_arch = .wasm32, .os_tag = .emscripten }),
+            .optimize = optimize,
+        }),
     });
-    b.installArtifact(exe);
+    // exe.root_module.addImport("zjb", zjb.module("zjb"));
+    exe.entry = .disabled;
+    exe.rdynamic = true;
+    exe.import_memory = true;
 
-    const wgpu_native_dep = b.dependency("wgpu_native_zig", .{});
-    exe.root_module.addImport("wgpu", wgpu_native_dep.module("wgpu"));
+    // const extract_simple = b.addRunArtifact(zjb.artifact("generate_js"));
+    // const extract_simple_out = extract_simple.addOutputFileArg("zjb_extract.js");
+    // extract_simple.addArg("Zjb"); // Name of js class.
+    // extract_simple.addArtifactArg(exe);
 
-    const run_cmd = b.addRunArtifact(exe);
-    run_cmd.step.dependOn(b.getInstallStep());
+    const install_step = b.getInstallStep();
+    install_step.dependOn(&b.addInstallArtifact(exe, .{
+        .dest_dir = .{ .override = dir },
+    }).step);
+    // install_step.dependOn(&b.addInstallFileWithDir(extract_simple_out, dir, "zjb_extract.js").step);
+    install_step.dependOn(&b.addInstallDirectory(.{
+        .source_dir = b.path("static"),
+        .install_dir = dir,
+        .install_subdir = "",
+    }).step);
 
-    if (b.args) |args| {
-        run_cmd.addArgs(args);
-    }
-
-    const run_step = b.step("run", "Run the app");
-    run_step.dependOn(&run_cmd.step);
-
-    const exe_unit_tests = b.addTest(.{
-        .root_module = exe_mod,
-    });
-
-    const run_exe_unit_tests = b.addRunArtifact(exe_unit_tests);
-
-    const test_step = b.step("test", "Run unit tests");
-    test_step.dependOn(&run_exe_unit_tests.step);
+    const run_demo_server = demo_webserver.runDemoServer(b, install_step, .{});
+    const serve = b.step("serve", "serve website locally");
+    serve.dependOn(run_demo_server);
 }

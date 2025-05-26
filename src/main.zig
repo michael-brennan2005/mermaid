@@ -14,114 +14,92 @@
 // It’s not called ‘The Wheel.’ It’s called ‘The Carousel.’
 
 const std = @import("std");
-const wgpu = @import("wgpu");
+
+const alloc = std.heap.wasm_allocator;
 
 pub const Tokenizer = @import("./frontend.zig").Tokenizer;
 pub const Parser = @import("./frontend.zig").Parser;
 pub const RegAlloc = @import("./frontend.zig").RegAlloc;
 pub const Types = @import("./frontend.zig").Types;
 
-pub const Renderer = @import("./backend.zig").Renderer;
+export fn allocate(size: usize) usize {
+    const memory = alloc.alloc(u8, size) catch {
+        return 0;
+    };
+    return @intFromPtr(memory.ptr);
+}
 
-pub fn main() !void {
-    var gpa = std.heap.DebugAllocator(.{}){};
-    const alloc = gpa.allocator();
+export fn free(addr: usize, len: usize) void {
+    const ptr: [*]u8 = @ptrFromInt(addr);
 
-    const stdin = std.io.getStdIn().reader();
-    const stdout = std.io.getStdOut().writer();
+    alloc.free(ptr[0..len]);
+}
 
-    const renderer = try Renderer.init(.{});
-    _ = renderer;
+pub fn consoleLog(comptime fmt: []const u8, args: anytype) void {
+    var arr = std.ArrayList(u8).init(alloc);
 
-    while (true) {
-        try stdout.print("eq > ", .{});
-
-        const buf = try stdin.readUntilDelimiterAlloc(alloc, '\n', 1024);
-        const buf_terminated = try alloc.dupeZ(u8, buf);
-        defer alloc.free(buf);
-        defer alloc.free(buf_terminated);
-
-        _ = try compile(alloc, buf_terminated);
-    }
-    // const instance = wgpu.Instance.create(null).?;
-    // defer instance.release();
-
-    // const adapter_request = instance.requestAdapterSync(&wgpu.RequestAdapterOptions{});
-    // const adapter = switch (adapter_request.status) {
-    //     .success => adapter_request.adapter.?,
-    //     else => return error.NoAdapter,
-    // };
-    // defer adapter.release();
-
-    // const device_request = adapter.requestDeviceSync(&wgpu.DeviceDescriptor{
-    //     .required_limits = null,
-    // });
-    // const device = switch (device_request.status) {
-    //     .success => device_request.device.?,
-    //     else => return error.NoDevice,
-    // };
-    // defer device.release();
-
-    // const queue = device.getQueue().?;
-    // defer queue.release();
-
+    std.fmt.format(arr.writer(), fmt, args) catch return;
 }
 
 // Text -> register allocated instructions
-pub fn compile(gpa: std.mem.Allocator, text: [:0]const u8) ![]Types.Inst {
-    const tokens = try Tokenizer.do(gpa, text);
-    const ssa = try Parser.do(gpa, tokens);
-    const insts = try RegAlloc.do(gpa, ssa);
+export fn compile(addr: usize, len: usize) void {
+    const ptr: [*:0]u8 = @ptrFromInt(addr);
+    const str: [:0]u8 = ptr[0..len :0];
+    _ = str;
+    @panic("Help!");
+    // const tokens = Tokenizer.do(alloc, str) catch return;
+    // const ssa = Parser.do(alloc, tokens) catch return;
+    // const insts = RegAlloc.do(alloc, ssa) catch return;
 
-    std.debug.print("Tokens:\n", .{});
-    for (tokens) |tok| {
-        Debug.prettyPrintToken(tok);
-        std.debug.print("\n", .{});
-    }
+    // consoleLog("Tokens:\n", .{});
+    // for (tokens) |tok| {
+    //     Debug.prettyPrintToken(tok);
+    //     consoleLog("\n", .{});
+    // }
 
-    std.debug.print("\nSSA:\n", .{});
-    for (ssa, 0..) |inst, i| {
-        std.debug.print("${d} = ", .{i});
-        Debug.prettyPrintSSA(inst, '$');
-        std.debug.print("\n", .{});
-    }
+    // consoleLog("\nSSA:\n", .{});
+    // for (ssa, 0..) |inst, i| {
+    //     consoleLog("${d} = ", .{i});
+    //     Debug.prettyPrintSSA(inst, '$');
+    //     consoleLog("\n", .{});
+    // }
 
-    std.debug.print("\nReg alloc:\n", .{});
-    for (insts) |inst| {
-        std.debug.print("r{d} = ", .{inst.out});
-        Debug.prettyPrintSSA(inst.ssa, 'r');
-        std.debug.print("\n", .{});
-    }
+    // consoleLog("\nReg alloc:\n", .{});
+    // for (insts) |inst| {
+    //     consoleLog("r{d} = ", .{inst.out});
+    //     Debug.prettyPrintSSA(inst.ssa, 'r');
+    //     consoleLog("\n", .{});
+    // }
 
-    return insts;
+    // return;
 }
 
 const Debug = struct {
     pub fn prettyPrintToken(tok: Types.Token) void {
         switch (tok) {
             .val => |val| {
-                std.debug.print("Val({d})", .{val});
+                consoleLog("Val({d})", .{val});
             },
             .op => |op| {
-                std.debug.print("Op({s})", .{@tagName(op)});
+                consoleLog("Op({s})", .{@tagName(op)});
             },
             .arg => |arg| {
-                std.debug.print("Arg({s})", .{@tagName(arg)});
+                consoleLog("Arg({s})", .{@tagName(arg)});
             },
             .func1 => |func1| {
-                std.debug.print("Func1({s})", .{@tagName(func1)});
+                consoleLog("Func1({s})", .{@tagName(func1)});
             },
             .func2 => |func2| {
-                std.debug.print("Func2({s})", .{@tagName(func2)});
+                consoleLog("Func2({s})", .{@tagName(func2)});
             },
             .left_paren => {
-                std.debug.print("(", .{});
+                consoleLog("(", .{});
             },
             .right_paren => {
-                std.debug.print(")", .{});
+                consoleLog(")", .{});
             },
             .comma => {
-                std.debug.print(",", .{});
+                consoleLog(",", .{});
             },
         }
     }
@@ -129,13 +107,13 @@ const Debug = struct {
     pub fn prettyPrintSSA(inst: Types.SSA, prefix: u8) void {
         switch (inst) {
             .op => |op| {
-                std.debug.print("{s} {c}{d} {c}{d}", .{ @tagName(op.op), prefix, op.lhs, prefix, op.rhs });
+                consoleLog("{s} {c}{d} {c}{d}", .{ @tagName(op.op), prefix, op.lhs, prefix, op.rhs });
             },
             .constant => |constant| {
-                std.debug.print("const {d}", .{constant});
+                consoleLog("const {d}", .{constant});
             },
             .arg => |arg| {
-                std.debug.print("arg {s}", .{@tagName(arg)});
+                consoleLog("arg {s}", .{@tagName(arg)});
             },
         }
     }

@@ -1,5 +1,6 @@
 // Text -> Register allocated instructions
 const std = @import("std");
+const consoleLog = @import("./main.zig").consoleLog;
 
 // Allow SSA and RegAlloc to share types (and eventually tokenizer)
 pub const Types = struct {
@@ -58,13 +59,10 @@ pub const Tokenizer = struct {
 
     pub fn do(gpa: std.mem.Allocator, buffer: [:0]const u8) ![]Types.Token {
         var tokenizer = Tokenizer{ .buffer = buffer, .index = 0 };
-
         var arr = std.ArrayList(Types.Token).init(gpa);
-
         while (try tokenizer.next()) |tok| {
             try arr.append(tok);
         }
-
         return arr.toOwnedSlice();
     }
 

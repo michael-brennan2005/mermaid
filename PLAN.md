@@ -47,6 +47,7 @@ FOR FUTURE: subexpression elimination w hashmap
     - KISS: Do webgpu in JS-land, profile & rewrite later usign Zig and making compatibility layer
     - WASM support is a bitch so let's just focus on that, better now than later having to rewrite a bunch of native code -> wasm. Also its insanely fast compilation I enjoy it
         - Fun toolchain exploring!
+    - Look into issues about string encoding (js is maybe utf-16? Zig is ascii)
     - Clause encoding
         - Fix everything at 8 bytes (so lots of padding, maybe a TODO: thing in future)
         - Opcode (1 byte)

@@ -1,5 +1,5 @@
 let wasmInstance: WebAssembly.Instance;
-const wasmMemory = new WebAssembly.Memory({ initial: 17, maximum: 1000 });
+const wasmMemory = new WebAssembly.Memory({ initial: 17, maximum: 1024 });
 
 type Span = {
     ptr: number,
@@ -27,12 +27,25 @@ function wasmString(string: string): Span {
     };
 }
 
+function log(addr: number, len: number) {
+    const view = new DataView(wasmMemory.buffer, addr, len);
+    const str = new TextDecoder().decode(view);
+    console.log(str);
+}
+
+function logPanic(addr: number, len: number) {
+    console.log("Panic from WASM Module VVVVVV");
+    log(addr, len);
+}
+
 (() => {
     const $ = (selector) => document.querySelector(selector);
 
     const env = {
         __stack_pointer: 0,
-        memory: wasmMemory
+        memory: wasmMemory,
+        logPanic: logPanic,
+        logDebug: log
     };
 
     async function init() {
@@ -45,7 +58,9 @@ function wasmString(string: string): Span {
             console.log("WASM module loaded");
 
             return {
-                compile: wasmInstance.exports.compile
+                wasmTest: wasmInstance.exports.wasmTest,
+                wasmTest2: wasmInstance.exports.wasmTest2,
+                compile: wasmInstance.exports.compile,
             }
         } catch (e) {
             console.error(`WASM loading failed: ${e.message}`);
@@ -55,18 +70,20 @@ function wasmString(string: string): Span {
     
 
     init().then((wasm) => {
-        // Get references to the input textarea, compile button, and output area
-        const inputElem = $('#input');
-        const compileBtn = $('#compileBtn');
-        $('#compileBtn').addEventListener('click', () => {
-            console.log(inputElem.value);
-            const str = wasmString(inputElem.value);
-            // @ts-ignore
-            wasmInstance.exports.compile(str.ptr, str.len);
-        });
+        // @ts-ignore
+        wasm.compile();
 
-        wasmString("Hello, world!");
+        // // Get references to the input textarea, compile button, and output area
+        // const inputElem = $('#input');
+        // const compileBtn = $('#compileBtn');
+        // $('#compileBtn').addEventListener('click', () => {
+        //     console.log(inputElem.value);
+        //     const str = wasmString(inputElem.value);
+        //     // @ts-ignore
+        //     wasmInstance.exports.compile(str.ptr, str.len);
+        // });
+
+        // wasmString("Hello, world!");
     });
 })();
-// const $ = (selector) => document.querySelector(selector);
 

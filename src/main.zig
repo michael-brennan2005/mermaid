@@ -14,107 +14,44 @@
 // It’s not called ‘The Wheel.’ It’s called ‘The Carousel.’
 
 const std = @import("std");
+const frontend = @import("./frontend.zig");
 
 const alloc = std.heap.wasm_allocator;
 
-pub const Tokenizer = @import("./frontend.zig").Tokenizer;
-pub const Parser = @import("./frontend.zig").Parser;
-pub const RegAlloc = @import("./frontend.zig").RegAlloc;
-pub const Types = @import("./frontend.zig").Types;
+extern fn logPanic(addr: usize, len: usize) void;
+extern fn logDebug(addr: usize, len: usize) void;
 
-export fn allocate(size: usize) usize {
-    const memory = alloc.alloc(u8, size) catch {
-        return 0;
+pub const panic = std.debug.FullPanic(panicHandler);
+fn panicHandler(msg: []const u8, first_trace_addr: ?usize) noreturn {
+    _ = first_trace_addr;
+    logPanic(@intFromPtr(msg.ptr), msg.len);
+    @trap();
+}
+
+fn print(msg: []const u8) void {
+    logDebug(@intFromPtr(msg.ptr), msg.len);
+}
+
+export fn wasmTest(size: u32) void {
+    var arr = std.ArrayList(u32).init(alloc);
+    defer arr.deinit();
+
+    for (0..size) |i| {
+        arr.append(i) catch @panic("OOM");
+        print("XXXXXX");
+    }
+}
+
+export fn wasmTest2(size: u32) void {
+    _ = size;
+    @panic("OOM");
+}
+
+export fn compile() void {
+    const tokens = frontend.Tokenizer.do(alloc, "x + y") catch {
+        @panic("Tokens failed");
     };
-    return @intFromPtr(memory.ptr);
+
+    print("We did well!");
+    _ = tokens;
 }
-
-export fn free(addr: usize, len: usize) void {
-    const ptr: [*]u8 = @ptrFromInt(addr);
-
-    alloc.free(ptr[0..len]);
-}
-
-pub fn consoleLog(comptime fmt: []const u8, args: anytype) void {
-    var arr = std.ArrayList(u8).init(alloc);
-
-    std.fmt.format(arr.writer(), fmt, args) catch return;
-}
-
-// Text -> register allocated instructions
-export fn compile(addr: usize, len: usize) void {
-    const ptr: [*:0]u8 = @ptrFromInt(addr);
-    const str: [:0]u8 = ptr[0..len :0];
-    _ = str;
-    @panic("Help!");
-    // const tokens = Tokenizer.do(alloc, str) catch return;
-    // const ssa = Parser.do(alloc, tokens) catch return;
-    // const insts = RegAlloc.do(alloc, ssa) catch return;
-
-    // consoleLog("Tokens:\n", .{});
-    // for (tokens) |tok| {
-    //     Debug.prettyPrintToken(tok);
-    //     consoleLog("\n", .{});
-    // }
-
-    // consoleLog("\nSSA:\n", .{});
-    // for (ssa, 0..) |inst, i| {
-    //     consoleLog("${d} = ", .{i});
-    //     Debug.prettyPrintSSA(inst, '$');
-    //     consoleLog("\n", .{});
-    // }
-
-    // consoleLog("\nReg alloc:\n", .{});
-    // for (insts) |inst| {
-    //     consoleLog("r{d} = ", .{inst.out});
-    //     Debug.prettyPrintSSA(inst.ssa, 'r');
-    //     consoleLog("\n", .{});
-    // }
-
-    // return;
-}
-
-const Debug = struct {
-    pub fn prettyPrintToken(tok: Types.Token) void {
-        switch (tok) {
-            .val => |val| {
-                consoleLog("Val({d})", .{val});
-            },
-            .op => |op| {
-                consoleLog("Op({s})", .{@tagName(op)});
-            },
-            .arg => |arg| {
-                consoleLog("Arg({s})", .{@tagName(arg)});
-            },
-            .func1 => |func1| {
-                consoleLog("Func1({s})", .{@tagName(func1)});
-            },
-            .func2 => |func2| {
-                consoleLog("Func2({s})", .{@tagName(func2)});
-            },
-            .left_paren => {
-                consoleLog("(", .{});
-            },
-            .right_paren => {
-                consoleLog(")", .{});
-            },
-            .comma => {
-                consoleLog(",", .{});
-            },
-        }
-    }
-
-    pub fn prettyPrintSSA(inst: Types.SSA, prefix: u8) void {
-        switch (inst) {
-            .op => |op| {
-                consoleLog("{s} {c}{d} {c}{d}", .{ @tagName(op.op), prefix, op.lhs, prefix, op.rhs });
-            },
-            .constant => |constant| {
-                consoleLog("const {d}", .{constant});
-            },
-            .arg => |arg| {
-                consoleLog("arg {s}", .{@tagName(arg)});
-            },
-        }
-    }
-};

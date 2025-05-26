@@ -35,7 +35,7 @@ var __generator = (this && this.__generator) || function (thisArg, body) {
     }
 };
 var wasmInstance;
-var wasmMemory = new WebAssembly.Memory({ initial: 17, maximum: 1000 });
+var wasmMemory = new WebAssembly.Memory({ initial: 17, maximum: 1024 });
 function freeSpan(span) {
     // @ts-ignore
     wasmInstance.exports.free(span.ptr);
@@ -52,11 +52,22 @@ function wasmString(string) {
         len: stringBytes.length + 1
     };
 }
+function log(addr, len) {
+    var view = new DataView(wasmMemory.buffer, addr, len);
+    var str = new TextDecoder().decode(view);
+    console.log(str);
+}
+function logPanic(addr, len) {
+    console.log("Panic from WASM Module VVVVVV");
+    log(addr, len);
+}
 (function () {
     var $ = function (selector) { return document.querySelector(selector); };
     var env = {
         __stack_pointer: 0,
-        memory: wasmMemory
+        memory: wasmMemory,
+        logPanic: logPanic,
+        logDebug: log
     };
     function init() {
         return __awaiter(this, void 0, void 0, function () {
@@ -71,7 +82,9 @@ function wasmString(string) {
                         wasmInstance = source.instance;
                         console.log("WASM module loaded");
                         return [2 /*return*/, {
-                                compile: wasmInstance.exports.compile
+                                wasmTest: wasmInstance.exports.wasmTest,
+                                wasmTest2: wasmInstance.exports.wasmTest2,
+                                compile: wasmInstance.exports.compile,
                             }];
                     case 2:
                         e_1 = _a.sent();
@@ -83,16 +96,17 @@ function wasmString(string) {
         });
     }
     init().then(function (wasm) {
-        // Get references to the input textarea, compile button, and output area
-        var inputElem = $('#input');
-        var compileBtn = $('#compileBtn');
-        $('#compileBtn').addEventListener('click', function () {
-            console.log(inputElem.value);
-            var str = wasmString(inputElem.value);
-            // @ts-ignore
-            wasmInstance.exports.compile(str.ptr, str.len);
-        });
-        wasmString("Hello, world!");
+        // @ts-ignore
+        wasm.compile();
+        // // Get references to the input textarea, compile button, and output area
+        // const inputElem = $('#input');
+        // const compileBtn = $('#compileBtn');
+        // $('#compileBtn').addEventListener('click', () => {
+        //     console.log(inputElem.value);
+        //     const str = wasmString(inputElem.value);
+        //     // @ts-ignore
+        //     wasmInstance.exports.compile(str.ptr, str.len);
+        // });
+        // wasmString("Hello, world!");
     });
 })();
-// const $ = (selector) => document.querySelector(selector);

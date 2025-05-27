@@ -66,8 +66,7 @@ function logPanic(addr, len) {
     var env = {
         __stack_pointer: 0,
         memory: wasmMemory,
-        logPanic: logPanic,
-        logDebug: log
+        consoleLog: log,
     };
     function init() {
         return __awaiter(this, void 0, void 0, function () {
@@ -96,17 +95,16 @@ function logPanic(addr, len) {
         });
     }
     init().then(function (wasm) {
+        var str = wasmString("x + y");
         // @ts-ignore
-        wasm.compile();
-        // // Get references to the input textarea, compile button, and output area
-        // const inputElem = $('#input');
-        // const compileBtn = $('#compileBtn');
-        // $('#compileBtn').addEventListener('click', () => {
-        //     console.log(inputElem.value);
-        //     const str = wasmString(inputElem.value);
-        //     // @ts-ignore
-        //     wasmInstance.exports.compile(str.ptr, str.len);
-        // });
-        // wasmString("Hello, world!");
+        var addr = wasm.compile(str.ptr, str.len - 1);
+        console.log("Now on JS side - ptr is: ".concat(addr));
+        var encodedNumber = new DataView(wasmMemory.buffer, addr, 4).getUint32(0, true); // true for little-endian, match Zig's default
+        console.log("Decoded u32 from WASM memory - # of insts: ".concat(encodedNumber));
+        var instData = new DataView(wasmMemory.buffer, (addr + 4), encodedNumber * 8); // each instruction is 8 bytes
+        for (var i = 0; i < encodedNumber; i += 1) {
+            var start = i * 8;
+            console.log("Opcode: ".concat(instData.getUint8(start), ", Output: ").concat(instData.getUint8(start + 1), ", Input1: ").concat(instData.getUint8(start + 2), ", Input2: ").concat(instData.getUint8(start + 3), ", Floating Point: ").concat(instData.getFloat32(start + 4, true)));
+        }
     });
 })();

@@ -39,7 +39,10 @@ TODO (DONE): we should try and comapct these to single functions instead of OOP 
 FOR FUTURE: Eliminate tokenization, one text -> SSA pass
 FOR FUTURE: eliminate instruction encoding pass
 FOR FUTURE: Look into immediate constant fixing 
+    - I forgot what this means
 FOR FUTURE: subexpression elimination w hashmap
+    - This gets easier with eliminate instruction encoding pass, because then every instruction is
+    now a u64
 
 # Strategic planning
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
@@ -54,4 +57,3 @@ FOR FUTURE: subexpression elimination w hashmap
         - Output slot (1 byte)
         - Two input slots (1 byte, 1 byte)
         - OR immediate constant (4 bytes).
-

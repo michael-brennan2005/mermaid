@@ -15,21 +15,38 @@
 
 const std = @import("std");
 const frontend = @import("./frontend.zig");
+const backend = @import("./backend.zig");
 
 const alloc = std.heap.wasm_allocator;
+const native_endian = @import("builtin").cpu.arch.endian();
 
-extern fn logPanic(addr: usize, len: usize) void;
-extern fn logDebug(addr: usize, len: usize) void;
+export fn allocate(len: u32) u32 {
+    const buf = alloc.alloc(u8, len) catch return 0;
+    return @intFromPtr(buf.ptr);
+}
+
+export fn free(addr: u32, len: u32) void {
+    alloc.free(@as([*]u8, @ptrFromInt(addr))[0..len]);
+}
+
+extern fn consoleLog(addr: usize, len: usize) void;
 
 pub const panic = std.debug.FullPanic(panicHandler);
+const panicString = "INCOMING PANIC:";
 fn panicHandler(msg: []const u8, first_trace_addr: ?usize) noreturn {
     _ = first_trace_addr;
-    logPanic(@intFromPtr(msg.ptr), msg.len);
+    consoleLog(@intFromPtr(panicString), panicString.len);
+    consoleLog(@intFromPtr(msg.ptr), msg.len);
     @trap();
 }
 
-fn print(msg: []const u8) void {
-    logDebug(@intFromPtr(msg.ptr), msg.len);
+var printBuffer: [1024]u8 = [_]u8{0} ** 1024;
+fn print(comptime fmt: []const u8, args: anytype) void {
+    var stream = std.io.fixedBufferStream(&printBuffer);
+    const writer = stream.writer();
+
+    std.fmt.format(writer, fmt, args) catch return;
+    consoleLog(@intFromPtr(&printBuffer), stream.pos);
 }
 
 export fn wasmTest(size: u32) void {
@@ -38,7 +55,7 @@ export fn wasmTest(size: u32) void {
 
     for (0..size) |i| {
         arr.append(i) catch @panic("OOM");
-        print("XXXXXX");
+        print("Element: {d}", .{i});
     }
 }
 
@@ -47,11 +64,44 @@ export fn wasmTest2(size: u32) void {
     @panic("OOM");
 }
 
-export fn compile() void {
-    const tokens = frontend.Tokenizer.do(alloc, "x + y") catch {
+export fn compile(addr: usize, len: usize) u32 {
+    const str: [:0]u8 = @as([*]u8, @ptrFromInt(addr))[0..len :0];
+
+    print("Running tokenization on string: {s}", .{str});
+    const tokens = frontend.Tokenizer.do(alloc, str) catch {
         @panic("Tokens failed");
     };
+    defer alloc.free(tokens);
 
-    print("We did well!");
-    _ = tokens;
+    print("Now doing ssa... (tokens length: {d})", .{tokens.len});
+    const ssa = frontend.Parser.do(alloc, tokens) catch {
+        @panic("Parser failed");
+    };
+    defer alloc.free(ssa);
+
+    print("Now creating final insts... (ssa len: {d})", .{ssa.len});
+    const insts = frontend.RegAlloc.do(alloc, ssa) catch {
+        @panic("RegAlloc failed");
+    };
+    defer alloc.free(insts);
+
+    print("Now encoding insts...", .{});
+    var bytes = std.ArrayList(u8).init(alloc);
+    const writer = bytes.writer();
+
+    writer.writeInt(u32, insts.len, native_endian) catch {
+        @panic("Writing byte header failed");
+    };
+
+    backend.InstEncoding.encode(writer.any(), insts, native_endian) catch {
+        @panic("InstEncoding failed");
+    };
+
+    const slice = bytes.toOwnedSlice() catch {
+        @panic("bytes.toOwnedSlice() failed");
+    };
+
+    print("All is well! Ptr is at {d}", .{@intFromPtr(slice.ptr)});
+
+    return @intFromPtr(slice.ptr);
 }

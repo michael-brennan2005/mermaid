@@ -229,19 +229,31 @@ pub const Parser = struct {
     }
 
     fn parseExpr(self: *Parser) !Types.Input {
-        const lhs = try self.parseFactor();
+        var lhs = try self.parseFactor();
 
-        if (self.advanceIfOp(Types.Op.add)) {
-            const rhs = try self.parseExpr();
+        while (true) {
+            if (self.advanceIfOp(Types.Op.add)) {
+                const rhs = try self.parseFactor();
 
-            return try self.addInst(Types.SSA{ .op = .{
-                .op = .add,
-                .lhs = lhs,
-                .rhs = rhs,
-            } });
-        } else {
-            return lhs;
+                lhs = try self.addInst(Types.SSA{ .op = .{
+                    .op = .add,
+                    .lhs = lhs,
+                    .rhs = rhs,
+                } });
+            } else if (self.advanceIfOp(Types.Op.sub)) {
+                const rhs = try self.parseFactor();
+
+                lhs = try self.addInst(Types.SSA{ .op = .{
+                    .op = .sub,
+                    .lhs = lhs,
+                    .rhs = rhs,
+                } });
+            } else {
+                break;
+            }
         }
+
+        return lhs;
     }
 
     fn parseFactor(self: *Parser) !Types.Input {

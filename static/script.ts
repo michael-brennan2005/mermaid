@@ -71,8 +71,11 @@ const outputImageScale = (1024 / 64);
 
     init().then(async (wasm) => {
         // MARK: frontend compilation to instructions
-
-        const str = wasmString("x + x +x + x + x + x+ y");
+        const expr = "x - x + y";
+        const startTime = performance.now(); // Record the start time
+        const str = wasmString(expr);
+        const endTime = performance.now(); // Record the end time
+        console.log(`wasmString("${expr}") took ${(endTime - startTime).toFixed(3)} ms`);
 
         // @ts-ignore
         let addr: number = wasm.compile(str.ptr, str.len - 1);

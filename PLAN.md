@@ -24,28 +24,17 @@ bytes at a time in reverse order
 # BIG TODO LIST
 
 TODO (DONE): better name for arg?
-    - Arg is fine
 TODO (DONE): centralize the op and arg types
 TODO (DONE): is there a hash set in zig
-    - There is not
 TODO (DONE): naming conventions
 TODO (DONE): consts and vars should be instructions
 TODO (DONE): we should try and comapct these to single functions instead of OOP vibe we got going on
 
 TODO: Write down how instruction encoding works w.r.t u32 and WGSL shenangians, seems like an easy
 thing to forget
+TODO: support numbers in form of ".32"
 
-FOR FUTURE: Eliminate tokenization, one text -> SSA pass
-FOR FUTURE: eliminate instruction encoding pass
-FOR FUTURE: Look into immediate constant fixing 
-    - I forgot what this means
-FOR FUTURE: subexpression elimination w hashmap
-    - This gets easier with eliminate instruction encoding pass, because then every instruction is
-    now a u64
-FOR FUTURE: More explicit interval defining vs. derivation from invocation id
-FOR FUTURE: dynamic allocation of regsiters for tape
-
-# Strategic planning
+# Strategic scratchpad
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
         - This means our bindgroup can just be the output image and encoded tape
     - KISS: Do webgpu in JS-land, profile & rewrite later usign Zig and making compatibility layer
@@ -61,3 +50,28 @@ FOR FUTURE: dynamic allocation of regsiters for tape
     - Rn - use invocation id to create intervals, but for future we
         - 64 x 64 dispatch assumed constant
         - so x_interval = [id.x - 32, id.x - 32 + 1], y_interval = [id.y - 32, id.y - 32 + 1]
+
+
+# The road to v2 (5-28-2025)
+    - STRAT: Hold off on tape pruning + 3D for now - focus on making something playful/usable
+    - Zig work
+        - Make RegAlloc emit encoded instructions & eliminate inst encoding step
+        - Fix/build subexpression elimination
+            - Not sure if we can actually do this with encoded instruction pass - would mean a hard
+            limit of 256 SSA statements
+                - Could probably work if we make SSA a version of encoded instruction but a u128 - double width for inputs, outputs, etc.
+        - Error handling
+            - Do this before grammar implementation (maybe)?
+        - Go and implement the rest of the grammar
+    - WebGPU/TS work
+        - Refactor script.ts
+            - break compute pipeline and render pipeline stuff into their own structs/namespaces, init functions for webgpu
+        - Proper UI, connect input to compilation
+        - Proper way of storing image width/height, scale, etc, explicit interval evaluation (vs.
+        // using invocation_id)
+        - Camera implementation
+            - Would force us to come up with a legitimate render pass
+    - Deployment
+        - Figure out how to put this on your site - subdomain and making this a seperate thing seems
+        best bet?
+        

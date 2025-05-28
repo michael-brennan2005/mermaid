@@ -79,6 +79,20 @@ export fn compile(addr: usize, len: usize) u32 {
     };
     defer alloc.free(ssa);
 
+    for (ssa, 0..) |elem, i| {
+        switch (elem) {
+            .op => |op| {
+                print("${d} = {s} ${d} ${d}", .{ i, @tagName(op.op), op.lhs, op.rhs });
+            },
+            .constant => |constant| {
+                print("${d} = const {d}", .{ i, constant });
+            },
+            .arg => |arg| {
+                print("${d} = arg {s}", .{ i, @tagName(arg) });
+            },
+        }
+    }
+
     print("Now creating final insts... (ssa len: {d})", .{ssa.len});
     const insts = frontend.RegAlloc.do(alloc, ssa) catch {
         @panic("RegAlloc failed");

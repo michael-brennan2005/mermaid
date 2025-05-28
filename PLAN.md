@@ -1,4 +1,7 @@
 # NOTES
+Important command:
+zig build && python3 -m http.server 8080 -d static/
+
 FINAL grammar:
 expr: term "+" expr | term "-" expr | term
 term: factor "*"" term | factor "/" term | factor
@@ -13,17 +16,10 @@ issues early. Also stick to 2D; GPU stuff is hard already so lets not complicate
 
 Subexpression optimization: Hash map of instructions -> which instruction
 
-Stages:
-- Tokenization
-- (MAYBE) parsing
-    - Pretty sure we can go straight from tokenization to SSA so skip this step
-- SSA generation
-- Register allocation
-    - Graph coloring vs. reverse linear scan
-        - RLS has slides from matt keeter
-- Uhhhh how the fuck does compute work
-- ????
-- Profit!
+There is a very weird endianess/encoding thing: webgpu doesnt have u8, only u32 types, and those
+are interpreted little-endian, so it messes with our encoding in backend.zig. Solution - encode 4
+bytes at a time in reverse order
+
 
 # BIG TODO LIST
 
@@ -36,6 +32,9 @@ TODO (DONE): naming conventions
 TODO (DONE): consts and vars should be instructions
 TODO (DONE): we should try and comapct these to single functions instead of OOP vibe we got going on
 
+TODO: Write down how instruction encoding works w.r.t u32 and WGSL shenangians, seems like an easy
+thing to forget
+
 FOR FUTURE: Eliminate tokenization, one text -> SSA pass
 FOR FUTURE: eliminate instruction encoding pass
 FOR FUTURE: Look into immediate constant fixing 
@@ -43,6 +42,8 @@ FOR FUTURE: Look into immediate constant fixing
 FOR FUTURE: subexpression elimination w hashmap
     - This gets easier with eliminate instruction encoding pass, because then every instruction is
     now a u64
+FOR FUTURE: More explicit interval defining vs. derivation from invocation id
+FOR FUTURE: dynamic allocation of regsiters for tape
 
 # Strategic planning
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
@@ -57,3 +58,6 @@ FOR FUTURE: subexpression elimination w hashmap
         - Output slot (1 byte)
         - Two input slots (1 byte, 1 byte)
         - OR immediate constant (4 bytes).
+    - Rn - use invocation id to create intervals, but for future we
+        - 64 x 64 dispatch assumed constant
+        - so x_interval = [id.x - 32, id.x - 32 + 1], y_interval = [id.y - 32, id.y - 32 + 1]

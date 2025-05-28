@@ -93,7 +93,7 @@ export fn compile(addr: usize, len: usize) u32 {
         @panic("Writing byte header failed");
     };
 
-    backend.InstEncoding.encode(writer.any(), insts, native_endian) catch {
+    backend.InstEncoding.encode(writer.any(), insts) catch {
         @panic("InstEncoding failed");
     };
 

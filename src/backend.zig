@@ -9,52 +9,38 @@ pub const InstEncoding = struct {
         add = 3, // reg <- reg + reg
     };
 
-    pub const Arg = enum(u8) { x = 0, y = 1 };
+    pub fn encodeInst(writer: std.io.AnyWriter, opcode: Opcode, out: u8, lhs: u8, rhs: u8, imm: f32) !void {
+        try writer.writeByte(rhs);
+        try writer.writeByte(lhs);
+        try writer.writeByte(out);
+        try writer.writeByte(@intFromEnum(opcode));
 
-    pub fn encode(writer: std.io.AnyWriter, insts: []Types.Inst, endian: std.builtin.Endian) !void {
+        try writer.writeInt(u32, @bitCast(imm), std.builtin.Endian.little);
+    }
+
+    pub fn encode(writer: std.io.AnyWriter, insts: []Types.Inst) !void {
         for (insts) |inst| {
             switch (inst.ssa) {
                 .constant => |constant| {
-                    try writer.writeByte(@intFromEnum(Opcode.constant));
-                    try writer.writeByte(@intCast(inst.out));
-                    try writer.writeByte(0x0);
-                    try writer.writeByte(0x0);
-                    try writer.writeInt(u32, @bitCast(constant), endian);
+                    try encodeInst(writer, Opcode.constant, @intCast(inst.out), 0, 0, constant);
                 },
                 .arg => |arg| {
-                    switch (arg) {
-                        .x => {
-                            try writer.writeByte(@intFromEnum(Opcode.x));
-                        },
-                        .y => {
-                            try writer.writeByte(@intFromEnum(Opcode.y));
-                        },
-                    }
+                    const op = switch (arg) {
+                        .x => Opcode.x,
+                        .y => Opcode.y,
+                    };
 
-                    try writer.writeByte(@intCast(inst.out));
-                    try writer.writeByte(0x0);
-                    try writer.writeByte(0x0);
-                    try writer.writeByte(0x0);
-                    try writer.writeByte(0x0);
-                    try writer.writeByte(0x0);
-                    try writer.writeByte(0x0);
+                    try encodeInst(writer, op, @intCast(inst.out), 0, 0, 0.0);
                 },
                 .op => |op| {
-                    switch (op.op) {
-                        .add => {
-                            try writer.writeByte(@intFromEnum(Opcode.add));
-                        },
+                    const opcode = switch (op.op) {
+                        .add => Opcode.add,
                         else => {
                             @panic("TODO error: unsupported");
                         },
-                    }
-                    try writer.writeByte(@intCast(inst.out));
-                    try writer.writeByte(@intCast(op.lhs));
-                    try writer.writeByte(@intCast(op.rhs));
-                    try writer.writeByte(0x0);
-                    try writer.writeByte(0x0);
-                    try writer.writeByte(0x0);
-                    try writer.writeByte(0x0);
+                    };
+
+                    try encodeInst(writer, opcode, @intCast(inst.out), @intCast(op.lhs), @intCast(op.rhs), 0.0);
                 },
             }
         }

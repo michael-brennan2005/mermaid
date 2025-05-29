@@ -15,7 +15,6 @@
 
 const std = @import("std");
 const frontend = @import("./frontend.zig");
-const backend = @import("./backend.zig");
 
 const alloc = std.heap.wasm_allocator;
 const native_endian = @import("builtin").cpu.arch.endian();
@@ -41,7 +40,7 @@ fn panicHandler(msg: []const u8, first_trace_addr: ?usize) noreturn {
 }
 
 var printBuffer: [1024]u8 = [_]u8{0} ** 1024;
-fn print(comptime fmt: []const u8, args: anytype) void {
+pub fn print(comptime fmt: []const u8, args: anytype) void {
     var stream = std.io.fixedBufferStream(&printBuffer);
     const writer = stream.writer();
 
@@ -80,42 +79,14 @@ export fn compile(addr: usize, len: usize) u32 {
     defer alloc.free(ssa);
 
     for (ssa, 0..) |elem, i| {
-        switch (elem) {
-            .op => |op| {
-                print("${d} = {s} ${d} ${d}", .{ i, @tagName(op.op), op.lhs, op.rhs });
-            },
-            .constant => |constant| {
-                print("${d} = const {d}", .{ i, constant });
-            },
-            .arg => |arg| {
-                print("${d} = arg {s}", .{ i, @tagName(arg) });
-            },
-        }
+        print("${d} = {s} ${d} ${d}", .{ i, @tagName(elem.op), elem.lhs, elem.rhs });
     }
 
     print("Now creating final insts... (ssa len: {d})", .{ssa.len});
-    const insts = frontend.RegAlloc.do(alloc, ssa) catch {
+    const bytes = frontend.RegAlloc.do(alloc, ssa) catch {
         @panic("RegAlloc failed");
     };
-    defer alloc.free(insts);
 
-    print("Now encoding insts...", .{});
-    var bytes = std.ArrayList(u8).init(alloc);
-    const writer = bytes.writer();
-
-    writer.writeInt(u32, insts.len, native_endian) catch {
-        @panic("Writing byte header failed");
-    };
-
-    backend.InstEncoding.encode(writer.any(), insts) catch {
-        @panic("InstEncoding failed");
-    };
-
-    const slice = bytes.toOwnedSlice() catch {
-        @panic("bytes.toOwnedSlice() failed");
-    };
-
-    print("All is well! Ptr is at {d}", .{@intFromPtr(slice.ptr)});
-
-    return @intFromPtr(slice.ptr);
+    print("ZIG SIDE: bytes is {any}", .{bytes});
+    return @intFromPtr(bytes.ptr);
 }

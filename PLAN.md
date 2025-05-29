@@ -15,11 +15,17 @@ strat: Build out full pipeline, keeping a super simple grammar. Hit architecture
 issues early. Also stick to 2D; GPU stuff is hard already so lets not complicate with 3rd dimension
 
 Subexpression optimization: Hash map of instructions -> which instruction
-
+    
 There is a very weird endianess/encoding thing: webgpu doesnt have u8, only u32 types, and those
 are interpreted little-endian, so it messes with our encoding in backend.zig. Solution - encode 4
 bytes at a time in reverse order
 
+- Clause encoding
+        - Fix everything at 8 bytes (so lots of padding, maybe a TODO: thing in future)
+        - Opcode (1 byte)
+        - Output slot (1 byte)
+        - Two input slots (1 byte, 1 byte)
+        - OR immediate constant (4 bytes).
 
 # BIG TODO LIST
 
@@ -40,25 +46,23 @@ TODO: support numbers in form of ".32"
     - KISS: Do webgpu in JS-land, profile & rewrite later usign Zig and making compatibility layer
     - WASM support is a bitch so let's just focus on that, better now than later having to rewrite a bunch of native code -> wasm. Also its insanely fast compilation I enjoy it
         - Fun toolchain exploring!
-    - Look into issues about string encoding (js is maybe utf-16? Zig is ascii)
-    - Clause encoding
-        - Fix everything at 8 bytes (so lots of padding, maybe a TODO: thing in future)
-        - Opcode (1 byte)
-        - Output slot (1 byte)
-        - Two input slots (1 byte, 1 byte)
-        - OR immediate constant (4 bytes).
     - Rn - use invocation id to create intervals, but for future we
         - 64 x 64 dispatch assumed constant
         - so x_interval = [id.x - 32, id.x - 32 + 1], y_interval = [id.y - 32, id.y - 32 + 1]
-
+    - STRAT: eliminating instruction encoding pass
+        - RegAlloc works in reverse order of instructions, having it take a writer is not the
+        approach.
+        - IDEA: RegAlloc allocates a buffer of u64s, 1 per instruction (each clause takes 8 bytes),
+        instead of outputting Types.Inst it writes directly to that buffer (using current encodeInst function)
+        - 
+            
 
 # The road to v2 (5-28-2025)
     - STRAT: Hold off on tape pruning + 3D for now - focus on making something playful/usable
     - Zig work
-        - Make RegAlloc emit encoded instructions & eliminate inst encoding step
-        - Fix/build subexpression elimination
-            - Not sure if we can actually do this with encoded instruction pass - would mean a hard
-            limit of 256 SSA statements
+        - (DONE) Make RegAlloc emit encoded instructions & eliminate inst encoding step
+        - (DONE) Fix/build subexpression elimination
+            - Not sure if we can actually do this with encoded instruction pass - would mean a hard limit of 256 SSA statements
                 - Could probably work if we make SSA a version of encoded instruction but a u128 - double width for inputs, outputs, etc.
         - Error handling
             - Do this before grammar implementation (maybe)?
@@ -74,4 +78,3 @@ TODO: support numbers in form of ".32"
     - Deployment
         - Figure out how to put this on your site - subdomain and making this a seperate thing seems
         best bet?
-        

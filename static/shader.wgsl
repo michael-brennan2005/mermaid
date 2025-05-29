@@ -35,6 +35,11 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
                     regs[in1].min + regs[in2].min, 
                     regs[in1].max + regs[in2].max);
             }
+            case 0x4: {
+                regs[out] = Interval(
+                    regs[in1].min - regs[in2].max,
+                    regs[in1].max - regs[in2].min);
+            }
             default: {
                 continue;
             }

@@ -19,9 +19,10 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
         let in1 = (tape[clause] >> 8) & 0xFF;
         let in2 = (tape[clause]) & 0xFF;
 
+        let imm = bitcast<f32>(tape[clause + 1]);
+
         switch (op) {
             case 0x0: {
-                let imm = f32(tape[clause + 1]);
                 regs[out] = Interval(imm, imm);
             }
             case 0x1: {
@@ -40,6 +41,54 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
                     regs[in1].min - regs[in2].max,
                     regs[in1].max - regs[in2].min);
             }
+            case 0x5: {
+                let a = regs[in1].min * regs[in2].min;
+                let b = regs[in1].min * regs[in2].max;
+                let c = regs[in1].max * regs[in2].min;
+                let d = regs[in1].max * regs[in2].max;
+                
+                regs[out] = Interval(
+                    min(min(a,b),min(c,d)),
+                    max(max(a,b),max(c,d)));
+            }
+            case 0x6: {
+                // div
+            }
+            case 0x7: {
+                // sqrt
+            }
+            case 0x8: {
+                // sin
+            }
+            case 0x9: {
+                // cos
+            }
+            case 0xA: {
+                // asin
+            }
+            case 0xB: {
+                // acos
+            }
+            case 0xC: {
+                // atan
+            }
+            case 0xD: {
+                regs[out] = Interval(exp(regs[in1].min), exp(regs[in1].max));
+            }
+            case 0xE: {
+                regs[out] = Interval(log(regs[in1].min), log(regs[in1].max));
+            }
+            case 0xF: {
+                regs[out] = Interval(
+                    min(abs(regs[in1].min), abs(regs[in1].max)),
+                    max(abs(regs[in1].min), abs(regs[in1].max)));
+            }
+            case 0x10: {
+                // min
+            }
+            case 0x11: {
+                // max
+            }
             default: {
                 continue;
             }
@@ -52,7 +101,7 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
         // ambiguous!
         fillTile(vec4(x.min, x.max, y.min, y.max), vec4(1.0, 1.0, 0.0, 1.0));
     } else {
-        fillTile(vec4(x.min, x.max, y.min, y.max), vec4(0.0,1.0,0.0,1.0));
+        fillTile(vec4(x.min, x.max, y.min, y.max), vec4(0.0,0.0,0.0,1.0));
     }
 }
 

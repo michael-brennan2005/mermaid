@@ -66,13 +66,11 @@ export fn wasmTest2(size: u32) void {
 export fn compile(addr: usize, len: usize) u32 {
     const str: [:0]u8 = @as([*]u8, @ptrFromInt(addr))[0..len :0];
 
-    print("Running tokenization on string: {s}", .{str});
     const tokens = frontend.Tokenizer.do(alloc, str) catch {
         @panic("Tokens failed");
     };
     defer alloc.free(tokens);
 
-    print("Now doing ssa... (tokens length: {d})", .{tokens.len});
     const ssa = frontend.Parser.do(alloc, tokens) catch {
         @panic("Parser failed");
     };
@@ -82,11 +80,9 @@ export fn compile(addr: usize, len: usize) u32 {
         print("${d} = {s} ${d} ${d}", .{ i, @tagName(elem.op), elem.lhs, elem.rhs });
     }
 
-    print("Now creating final insts... (ssa len: {d})", .{ssa.len});
     const bytes = frontend.RegAlloc.do(alloc, ssa) catch {
         @panic("RegAlloc failed");
     };
 
-    print("ZIG SIDE: bytes is {any}", .{bytes});
     return @intFromPtr(bytes.ptr);
 }

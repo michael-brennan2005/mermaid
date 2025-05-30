@@ -35,10 +35,39 @@ TODO (DONE): is there a hash set in zig
 TODO (DONE): naming conventions
 TODO (DONE): consts and vars should be instructions
 TODO (DONE): we should try and comapct these to single functions instead of OOP vibe we got going on
+TODO (DONE): Write down how instruction encoding works w.r.t u32 and WGSL shenangians, seems like an easy thing to forget
+TODO (DONE): Make RegAlloc emit encoded instructions & eliminate inst encoding step
+TODO (DONE): Fix/build subexpression elimination
+TODO (DONE): Go and implement the rest of the grammar
+TODO (DONE): simplify advance functions in the parser
 
-TODO: Write down how instruction encoding works w.r.t u32 and WGSL shenangians, seems like an easy
-thing to forget
+
+Tier 1 issues (road to v2)
+TODO: Refactor script.ts, give compute and render pipeline their own structs, init functions for webgpu, maybe break into multiple files and setup a webpack (hell nah)
+TODO: Proper UI and connect input to compilation
+TODO: figure out uniforms, storing image width/height, scale, etc.
+TODO: camera implementation/setting up a more legitimate render pass
+TODO: error handling
+TODO: deploy this on your site
+
+Tier 2 issues
+TODO: 3d support
+TODO: subinterval evaluation
+    - Need to figure out how the data flow works, how subintervals get stored somewhere, how
+    subsequent dispatch call works
+TODO: tape pruning
+
+Tier 3 issues
 TODO: support numbers in form of ".32"
+TODO: Cleaning up parsing
+    - Token.Op -> Opcode functoins (fromFunc1 and fromFunc2) seem icky, maybe make more sense for one
+    function that handles args, constants, binops, etc. Token -> Opcode
+    - May be better for Token.Op to be split into multiple - func1s and func2s are all parsed same,
+    but ops are not (diff. precedence levels). Would eliminate need for advanceIfOp function
+TODO: would log be better off as a 2 argument function? log_a(b)
+TODO: Prickly OCD thing but shader uses hex opcodes whereas frontend Type.Opcode uses decimal opcodes
+TODO: let variable bindings, proper scripting language vibe
+TODO: profile and find out why parsing takes forever
 
 # Strategic scratchpad
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
@@ -55,26 +84,4 @@ TODO: support numbers in form of ".32"
         - IDEA: RegAlloc allocates a buffer of u64s, 1 per instruction (each clause takes 8 bytes),
         instead of outputting Types.Inst it writes directly to that buffer (using current encodeInst function)
         - 
-            
-
-# The road to v2 (5-28-2025)
-    - STRAT: Hold off on tape pruning + 3D for now - focus on making something playful/usable
-    - Zig work
-        - (DONE) Make RegAlloc emit encoded instructions & eliminate inst encoding step
-        - (DONE) Fix/build subexpression elimination
-            - Not sure if we can actually do this with encoded instruction pass - would mean a hard limit of 256 SSA statements
-                - Could probably work if we make SSA a version of encoded instruction but a u128 - double width for inputs, outputs, etc.
-        - Error handling
-            - Do this before grammar implementation (maybe)?
-        - Go and implement the rest of the grammar
-    - WebGPU/TS work
-        - Refactor script.ts
-            - break compute pipeline and render pipeline stuff into their own structs/namespaces, init functions for webgpu
-        - Proper UI, connect input to compilation
-        - Proper way of storing image width/height, scale, etc, explicit interval evaluation (vs.
-        // using invocation_id)
-        - Camera implementation
-            - Would force us to come up with a legitimate render pass
-    - Deployment
-        - Figure out how to put this on your site - subdomain and making this a seperate thing seems
-        best bet?
+        

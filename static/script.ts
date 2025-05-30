@@ -71,27 +71,24 @@ const outputImageScale = (1024 / 64);
 
     init().then(async (wasm) => {
         // MARK: frontend compilation to instructions
-        const expr = "0 - 1.0";
-        const startTime = performance.now(); // Record the start time
+        const expr = "x*x + y*y - 25.0";
         const str = wasmString(expr);
-        const endTime = performance.now(); // Record the end time
-        console.log(`wasmString("${expr}") took ${(endTime - startTime)} ms`);
-
+        
         // @ts-ignore
         let addr: number = wasm.compile(str.ptr, str.len - 1);
-        console.log(`Now on JS side - ptr is: ${addr}`)
+        
+        const tapeLength = new DataView(wasmMemory.buffer, addr, 4).getUint32(0, true); // true for little-endian, match Zig's default
+        const tapeData = new DataView(wasmMemory.buffer, (addr + 4), tapeLength * 8) // each instruction is 8 bytes
 
-        const debugging = new Uint8Array(wasmMemory.buffer, addr, 4 + (6 * 8));
-        console.log(`JS SIDE: data is ${debugging}`);
-
-        const encodedNumber = new DataView(wasmMemory.buffer, addr, 4).getUint32(0, true); // true for little-endian, match Zig's default
-        console.log(`Decoded u32 from WASM memory - # of insts: ${encodedNumber}`);
-
-        const tapeData = new DataView(wasmMemory.buffer, (addr + 4), encodedNumber * 8) // each instruction is 8 bytes
-
-        for (let i = 0; i < encodedNumber; i += 1) {
+        for (let i = 0; i < tapeLength; i += 1) {
             const start = i * 8;
-            console.log(`Opcode: ${tapeData.getUint8(start + 3)}, Output: ${tapeData.getUint8(start + 2)}, Input1: ${tapeData.getUint8(start + 1)}, Input2: ${tapeData.getUint8(start + 0)}, Floating Point: ${tapeData.getFloat32(start + 4, true)}`)
+            
+            const opcode = tapeData.getUint8(start + 3);
+            const output = tapeData.getUint8(start + 2);
+            const rhs = tapeData.getUint8(start + 1);
+            const lhs = tapeData.getUint8(start);
+
+            console.log(`r${output} = op(${opcode}) r${lhs} r${rhs} (imm: ${tapeData.getFloat32(start + 4, true)})`);
         }
 
         // MARK: webgpu initialization
@@ -121,7 +118,7 @@ const outputImageScale = (1024 / 64);
         // MARK: resource creation
         const tapeBuffer = device.createBuffer({
             label: "Tape buffer",
-            size: encodedNumber * 8,
+            size: tapeLength * 8,
             usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
 
@@ -129,7 +126,7 @@ const outputImageScale = (1024 / 64);
         // We'll create a Uint8Array view to print the raw bytes in a readable format
         const tapeBytes = new Uint8Array(tapeData.buffer, tapeData.byteOffset, tapeData.byteLength);
         console.log("Raw tapeData.buffer bytes:", Array.from(tapeBytes));
-        device.queue.writeBuffer(tapeBuffer, 0, tapeBytes, 0, encodedNumber * 8);
+        device.queue.writeBuffer(tapeBuffer, 0, tapeBytes, 0, tapeLength * 8);
 
         const outputTexture = device.createTexture({
             label: "Output texture",

@@ -8,11 +8,49 @@ const little_endian = std.builtin.Endian.little;
 // Allow SSA and RegAlloc to share types (and eventually tokenizer)
 pub const Types = struct {
     pub const Opcode = enum(u8) {
-        constant = 0, // reg <- imm
-        x = 1, // reg <- X
-        y = 2, // reg <- Y
-        add = 3, // reg <- reg + reg
-        sub = 4, // reg <- reg - reg
+        // reg <- {imm, x, y}
+        constant = 0,
+        x = 1,
+        y = 2,
+        // reg <- reg [op] reg
+        add = 3,
+        sub = 4,
+        mul = 5,
+        div = 6,
+        // reg <- fn(reg)
+        sqrt = 7,
+        sin = 8,
+        cos = 9,
+        asin = 10,
+        acos = 11,
+        atan = 12,
+        exp = 13,
+        log = 14,
+        abs = 15,
+        // reg <- fn(reg, reg)
+        min = 16,
+        max = 17,
+
+        pub fn fromFunc1(val: Token.Func1) Opcode {
+            return switch (val) {
+                .sqrt => .sqrt,
+                .sin => .sin,
+                .cos => .cos,
+                .asin => .asin,
+                .acos => .acos,
+                .atan => .atan,
+                .exp => .exp,
+                .log => .log,
+                .abs => .abs,
+            };
+        }
+
+        pub fn fromFunc2(val: Token.Func2) Opcode {
+            return switch (val) {
+                .min => .min,
+                .max => .max,
+            };
+        }
     };
 
     pub const SSA = packed struct {
@@ -38,6 +76,10 @@ pub const Types = struct {
 
         pub fn binOp(op: Opcode, lhs: usize, rhs: usize) SSA {
             return SSA{ .op = op, .lhs = lhs, .rhs = rhs };
+        }
+
+        pub fn unaryOp(op: Opcode, lhs: usize) SSA {
+            return SSA{ .op = op, .lhs = lhs };
         }
     };
 
@@ -238,19 +280,26 @@ pub const Parser = struct {
         return parser.insts.toOwnedSlice();
     }
 
-    fn parse(self: *Parser) !void {
+    const ParseError = error{ ParseFailed, OutOfMemory };
+
+    fn parse(self: *Parser) ParseError!void {
+        print("parse at idx {d}", .{self.index});
         _ = try self.parseExpr();
     }
 
-    fn parseExpr(self: *Parser) !Types.Input {
-        var lhs = try self.parseFactor();
+    fn parseExpr(self: *Parser) ParseError!Types.Input {
+        print("parseExpr at idx {d}", .{self.index});
+        var lhs = try self.parseTerm();
 
         while (true) {
+            print("parseExpr (inner loop) at idx {d}", .{self.index});
             if (self.advanceIfOp(Types.Token.Op.add)) {
-                const rhs = try self.parseFactor();
+                print("parseExpr at idx {d} - add token hit", .{self.index});
+                const rhs = try self.parseTerm();
                 lhs = try self.addInst(Types.SSA.binOp(.add, lhs, rhs));
             } else if (self.advanceIfOp(Types.Token.Op.sub)) {
-                const rhs = try self.parseFactor();
+                print("parseExpr at idx {d} - sub token hit", .{self.index});
+                const rhs = try self.parseTerm();
                 lhs = try self.addInst(Types.SSA.binOp(.sub, lhs, rhs));
             } else {
                 break;
@@ -260,19 +309,101 @@ pub const Parser = struct {
         return lhs;
     }
 
-    fn parseFactor(self: *Parser) !Types.Input {
-        if (self.advanceIfNumber()) |val| {
+    fn parseTerm(self: *Parser) ParseError!Types.Input {
+        print("parseTerm at idx {d}", .{self.index});
+        var lhs = try self.parseFactor();
+
+        while (true) {
+            print("parseTerm (inner loop) at idx {d}", .{self.index});
+            if (self.advanceIfOp(Types.Token.Op.mul)) {
+                const rhs = try self.parseFactor();
+                lhs = try self.addInst(Types.SSA.binOp(.mul, lhs, rhs));
+            } else if (self.advanceIfOp(Types.Token.Op.div)) {
+                const rhs = try self.parseFactor();
+                lhs = try self.addInst(Types.SSA.binOp(.div, lhs, rhs));
+            } else {
+                break;
+            }
+        }
+
+        print("Exiting parseTerm at idx {d}", .{self.index});
+        return lhs;
+    }
+
+    fn parseFactor(self: *Parser) ParseError!Types.Input {
+        print("parseFactor at idx {d}", .{self.index});
+        if (self.advanceIf(.left_paren)) |_| {
+            const expr = try self.parseExpr();
+
+            if (self.advanceIf(.right_paren) == null) {
+                @panic("TODO error: no right paren");
+            }
+
+            return expr;
+        }
+
+        if (self.advanceIf(.val)) |val| {
             return try self.addInst(Types.SSA.constant(val));
         }
 
-        if (self.advanceIfArg()) |arg| {
+        if (self.advanceIf(.arg)) |arg| {
             return try self.addInst(switch (arg) {
                 .x => Types.SSA.x(),
                 .y => Types.SSA.y(),
             });
         }
 
+        if (self.advanceIf(.func1)) |func1| {
+            if (self.advanceIf(.left_paren) == null) {
+                @panic("TODO error: no left paren");
+            }
+
+            const expr = try self.parseExpr();
+
+            if (self.advanceIf(.right_paren) == null) {
+                @panic("TODO error: no right paren");
+            }
+
+            return try self.addInst(Types.SSA.unaryOp(Types.Opcode.fromFunc1(func1), expr));
+        }
+
+        if (self.advanceIf(.func2)) |func2| {
+            if (self.advanceIf(.left_paren) == null) {
+                @panic("TODO error: no left paren");
+            }
+
+            const lhs = try self.parseExpr();
+
+            if (self.advanceIf(.comma) == null) {
+                @panic("TODO error: expected comma");
+            }
+
+            const rhs = try self.parseExpr();
+
+            if (self.advanceIf(.right_paren) == null) {
+                @panic("TODO error: no right paren");
+            }
+
+            return try self.addInst(Types.SSA.binOp(Types.Opcode.fromFunc2(func2), lhs, rhs));
+        }
+
         @panic("TODO error: we get to this point");
+    }
+
+    fn advanceIf(
+        self: *Parser,
+        comptime tag: std.meta.Tag(Types.Token),
+    ) ?@FieldType(Types.Token, @tagName(tag)) {
+        if (self.index >= self.toks.len) {
+            return null;
+        }
+
+        if (self.toks[self.index] == tag) {
+            _ = self.advance();
+            return @field(self.toks[self.index - 1], @tagName(tag));
+        }
+
+        return null;
     }
 
     fn advanceIfOp(self: *Parser, op: Types.Token.Op) bool {
@@ -280,45 +411,17 @@ pub const Parser = struct {
             return false;
         }
 
-        return switch (self.toks[self.index]) {
-            .op => |op2| {
-                if (op == op2) {
+        switch (self.toks[self.index]) {
+            .op => |_op| {
+                if (op == _op) {
                     _ = self.advance();
                     return true;
-                } else {
-                    return false;
                 }
             },
-            else => false,
-        };
-    }
-
-    fn advanceIfNumber(self: *Parser) ?f32 {
-        if (self.index >= self.toks.len) {
-            return null;
+            else => {},
         }
 
-        return switch (self.toks[self.index]) {
-            .val => |val| {
-                _ = self.advance();
-                return val;
-            },
-            else => null,
-        };
-    }
-
-    fn advanceIfArg(self: *Parser) ?Types.Token.Arg {
-        if (self.index >= self.toks.len) {
-            return null;
-        }
-
-        return switch (self.toks[self.index]) {
-            .arg => |arg| {
-                _ = self.advance();
-                return arg;
-            },
-            else => null,
-        };
+        return false;
     }
 
     fn advance(self: *Parser) Types.Token {
@@ -326,13 +429,14 @@ pub const Parser = struct {
         return self.toks[self.index - 1];
     }
 
-    fn addInst(self: *Parser, inst: Types.SSA) !Types.Input {
+    fn addInst(self: *Parser, inst: Types.SSA) ParseError!Types.Input {
+        print("Adding instruction of opcode {s}", .{@tagName(inst.op)});
         if (self.cache.get(inst)) |idx| {
             return idx;
         } else {
-            try self.insts.append(inst);
+            self.insts.append(inst) catch return ParseError.OutOfMemory;
             const i = self.insts.items.len - 1;
-            try self.cache.put(inst, i);
+            self.cache.put(inst, i) catch return ParseError.OutOfMemory;
             return i;
         }
     }
@@ -361,7 +465,6 @@ pub const RegAlloc = struct {
         defer regAlloc.free.deinit();
 
         std.mem.writeInt(u32, regAlloc.output[0..4], ssa.len, little_endian);
-        print("SSA len is {any}", .{regAlloc.output[0..4]});
 
         var i: usize = regAlloc.ssa.len;
         while (i > 0) {
@@ -372,9 +475,12 @@ pub const RegAlloc = struct {
 
             try regAlloc.unbind(i);
             switch (inst.op) {
-                .add, .sub => {
+                .add, .sub, .mul, .div, .min, .max => {
                     inst.lhs = try regAlloc.bind(inst.lhs);
                     inst.rhs = try regAlloc.bind(inst.rhs);
+                },
+                .sqrt, .sin, .cos, .asin, .acos, .atan, .exp, .log, .abs => {
+                    inst.lhs = try regAlloc.bind(inst.lhs);
                 },
                 else => {},
             }
@@ -405,6 +511,8 @@ pub const RegAlloc = struct {
         self.output[start + 1] = lhs;
         self.output[start + 2] = out;
         self.output[start + 3] = @intFromEnum(opcode);
+        print("F32: {d} -> U32: {d}", .{ @as(f32, @bitCast(imm)), imm });
+
         std.mem.writeInt(u32, @ptrCast(self.output.ptr + start + 4), imm, std.builtin.Endian.little);
     }
 

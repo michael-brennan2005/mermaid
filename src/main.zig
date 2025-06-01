@@ -15,9 +15,10 @@
 
 const std = @import("std");
 const frontend = @import("./frontend.zig");
+const encoding = @import("./encoding.zig");
 
 const alloc = std.heap.wasm_allocator;
-const native_endian = @import("builtin").cpu.arch.endian();
+const little_endian = std.builtin.Endian.little;
 
 export fn allocate(len: u32) u32 {
     const buf = alloc.alloc(u8, len) catch return 0;
@@ -48,41 +49,42 @@ pub fn print(comptime fmt: []const u8, args: anytype) void {
     consoleLog(@intFromPtr(&printBuffer), stream.pos);
 }
 
-export fn wasmTest(size: u32) void {
-    var arr = std.ArrayList(u32).init(alloc);
-    defer arr.deinit();
-
-    for (0..size) |i| {
-        arr.append(i) catch @panic("OOM");
-        print("Element: {d}", .{i});
-    }
-}
-
-export fn wasmTest2(size: u32) void {
-    _ = size;
-    @panic("OOM");
-}
-
 export fn compile(addr: usize, len: usize) u32 {
     const str: [:0]u8 = @as([*]u8, @ptrFromInt(addr))[0..len :0];
 
-    const tokens = frontend.Tokenizer.do(alloc, str) catch {
-        @panic("Tokens failed");
-    };
-    defer alloc.free(tokens);
+    var err: ?frontend.CompilationError = null;
 
-    const ssa = frontend.Parser.do(alloc, tokens) catch {
-        @panic("Parser failed");
+    const tokens = frontend.Tokenizer.do(alloc, str, &err) catch {
+        if (err) |ce| {
+            const buf = encoding.encodeError(alloc, ce);
+            return @intFromPtr(buf.ptr);
+        }
+
+        @panic("Tokenization failed, no CE reported");
+    };
+
+    const ssa = frontend.Parser.do(alloc, tokens, &err) catch {
+        if (err) |ce| {
+            const buf = encoding.encodeError(alloc, ce);
+            return @intFromPtr(buf.ptr);
+        }
+
+        @panic("Parser failed, no CE reported");
     };
     defer alloc.free(ssa);
 
-    for (ssa, 0..) |elem, i| {
-        print("${d} = {s} ${d} ${d}", .{ i, @tagName(elem.op), elem.lhs, elem.rhs });
-    }
+    // for (ssa, 0..) |elem, i| {
+    //     print("${d} = {s} ${d} ${d}", .{ i, @tagName(elem.op), elem.lhs, elem.rhs });
+    // }
 
     const bytes = frontend.RegAlloc.do(alloc, ssa) catch {
+        // Only way this errors as of now (may 31st) is OOM which I think is unlikely enough to warrant
+        // panic
         @panic("RegAlloc failed");
     };
 
-    return @intFromPtr(bytes.ptr);
+    const buf = encoding.encodeInsts(alloc, bytes);
+
+    print("Buffer being sent is {any}", .{buf});
+    return @intFromPtr(buf.ptr);
 }

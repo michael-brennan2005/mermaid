@@ -1,156 +1,170 @@
-let wasmInstance: WebAssembly.Instance;
-const wasmMemory = new WebAssembly.Memory({ initial: 17, maximum: 1024 });
-
 type Span = {
     ptr: number,
     len: number
 };
 
-function freeSpan(span: Span) {
-    // @ts-ignore
-    wasmInstance.exports.free(span.ptr);
-}
+type CompilationResult = 
+    { type: "error", msg: Span } |
+    { type: "success", insts: Span };
 
-function wasmString(string: string): Span {
-    const encoder = new TextEncoder();
-    const stringBytes = encoder.encode(string);
+class WasmModule {
+    private instance!: WebAssembly.Instance;
+    private memory = new WebAssembly.Memory({ initial: 17, maximum: 1024 });
 
-    // @ts-ignore
-    const ptr = wasmInstance.exports.allocate(stringBytes.length + 1);
+    private exports!: {
+        allocate: (len: number) => number;
+        free: (ptr: number) => void;
+        compile: (ptr: number, len: number) => number;
+    }
 
-    new Uint8Array(wasmMemory.buffer, ptr, stringBytes.length).set(stringBytes);
-    new Uint8Array(wasmMemory.buffer, ptr + stringBytes.length, 1)[0] = 0;
+    // No async constructors :(
+    async init() {
+        const env = {
+            __stack_pointer: 0,
+            memory: this.memory,
+            consoleLog: (ptr: number, len: number) => {
+                console.log(`[ZIG] ${this.getString({ len, ptr })}`);
+            },
+        };
 
-    return {
-        ptr: ptr,
-        len: stringBytes.length + 1
-    };
-}
-
-function log(addr: number, len: number) {
-    const view = new DataView(wasmMemory.buffer, addr, len);
-    const str = new TextDecoder().decode(view);
-    console.log(str);
-}
-
-function logPanic(addr: number, len: number) {
-    console.log("Panic from WASM Module VVVVVV");
-    log(addr, len);
-}
-
-const outputImageWidth = 1024;
-const outputImageHeight = 1024;
-const outputImageScale = (1024 / 64);
-(() => {
-    const $ = (selector: any) => document.querySelector(selector);
-
-    const env = {
-        __stack_pointer: 0,
-        memory: wasmMemory,
-        consoleLog: log,
-    };
-
-    async function init() {
         try {
             let source = await WebAssembly.instantiateStreaming(
                 fetch('teddy.wasm'),
-                { env: env });
-            wasmInstance = source.instance;
+                { env: env }
+            );
 
-            console.log("WASM module loaded");
-
-            return {
-                wasmTest: wasmInstance.exports.wasmTest,
-                wasmTest2: wasmInstance.exports.wasmTest2,
-                compile: wasmInstance.exports.compile,
+            this.instance = source.instance;
+            this.exports = {
+                // @ts-ignore
+                free: source.instance.exports.free,
+                // @ts-ignore
+                allocate: source.instance.exports.allocate,
+                // @ts-ignore
+                compile: source.instance.exports.compile,
             }
+
         } catch (e: any) {
             console.error(`WASM loading failed: ${e.message}`);
         }
+
+        console.log("WASM module loaded");
     }
 
-    init().then(async (wasm) => {
-        // MARK: frontend compilation to instructions
-        const expr = "x*x + y*y - 25.0";
-        const str = wasmString(expr);
-        
-        // @ts-ignore
-        let addr: number = wasm.compile(str.ptr, str.len - 1);
-        
-        const tapeLength = new DataView(wasmMemory.buffer, addr, 4).getUint32(0, true); // true for little-endian, match Zig's default
-        const tapeData = new DataView(wasmMemory.buffer, (addr + 4), tapeLength * 8) // each instruction is 8 bytes
+    free(span: Span) {
+        this.exports.free(span.ptr);
+    }
 
-        for (let i = 0; i < tapeLength; i += 1) {
-            const start = i * 8;
-            
-            const opcode = tapeData.getUint8(start + 3);
-            const output = tapeData.getUint8(start + 2);
-            const rhs = tapeData.getUint8(start + 1);
-            const lhs = tapeData.getUint8(start);
-
-            console.log(`r${output} = op(${opcode}) r${lhs} r${rhs} (imm: ${tapeData.getFloat32(start + 4, true)})`);
+    allocate(len: number): Span {
+        // TODO: proper error handling
+        return {
+            len,
+            ptr: this.exports.allocate(len)
         }
+    }
 
-        // MARK: webgpu initialization
+    // First 4 bytes of returned buffer is # of 8-byte instructions, rest of the buffer is those
+    // 8 byte instructions
+    compile(str: string): CompilationResult {
+        const encoder = new TextEncoder();
+        const stringBytes = encoder.encode(str);
 
+        const buf = this.exports.allocate(stringBytes.length + 1);
+
+        new Uint8Array(this.memory.buffer, buf, stringBytes.length).set(stringBytes);
+        new Uint8Array(this.memory.buffer, buf + stringBytes.length, 1)[0] = 0;
+
+        let addr: number = this.exports.compile(buf, stringBytes.length);
+        let type: number = new DataView(this.memory.buffer, addr, 1).getUint8(0)
+    
+        if (type === 0x0) {
+            console.log("First byte is 0 - success");
+            const data = new DataView(this.memory.buffer, addr + 1, 8);
+
+            return {
+                type: "success",
+                insts: {
+                    len: data.getUint32(0, true),
+                    ptr: data.getUint32(4, true)
+                }
+            }
+        } else {
+            console.log("First byte is 1 - error");
+            const data = new DataView(this.memory.buffer, addr + 1, 8);
+
+            return {
+                type: "error",
+                msg: {
+                    len: data.getUint32(0, true),
+                    ptr: data.getUint32(4, true)
+                }
+            }
+        }
+    }
+
+    getDataView(span: Span, offset: number): DataView {
+        return new DataView(this.memory.buffer, span.ptr + offset, span.len - offset);
+    }
+
+    getUint8Array(span: Span, offset: number): Uint8Array {
+        return new Uint8Array(this.memory.buffer, span.ptr + offset, span.len - offset);
+    }
+
+    getString(span: Span): string {
+        const view = this.getDataView(span, 0);
+        return new TextDecoder().decode(view);
+    }
+}
+
+class WebGPUState {
+    device!: GPUDevice;
+    canvas!: HTMLCanvasElement;
+    canvasContext!: GPUCanvasContext;
+    canvasFormat!: GPUTextureFormat;
+
+    // No async constructors :(
+    async init() {
         if (!navigator.gpu) throw Error("WebGPU not supported");
 
         const adapter = await navigator.gpu.requestAdapter();
         if (!adapter) throw Error("Couldn't get WebGPU adapater");
 
-        const device = await adapter.requestDevice();
-        device.lost.then(() => {
-            throw Error("WebGPU logical deviceddd was lost")
-        })
-
-        const canvas: HTMLCanvasElement = $("canvas");
-        const canvasFormat = navigator.gpu.getPreferredCanvasFormat();
-        console.log(canvasFormat);
-        const context = canvas.getContext('webgpu')!;
-        context.configure({
-            device,
-            format: navigator.gpu.getPreferredCanvasFormat()
+        this.device = await adapter.requestDevice();
+        this.device.lost.then(() => {
+            throw Error("WebGPU logical device was lost")
         });
 
+        this.canvas = document.querySelector("canvas")!;
+        this.canvasFormat = navigator.gpu.getPreferredCanvasFormat();
 
-        console.log("WebGPU stuff initialized");
-
-        // MARK: resource creation
-        const tapeBuffer = device.createBuffer({
-            label: "Tape buffer",
-            size: tapeLength * 8,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+        this.canvasContext = this.canvas.getContext('webgpu')!;
+        this.canvasContext.configure({
+            device: this.device,
+            format: this.canvasFormat
         });
+    }
+}
 
-        // Print out the contents of tapeData.buffer for debugging purposes
-        // We'll create a Uint8Array view to print the raw bytes in a readable format
-        const tapeBytes = new Uint8Array(tapeData.buffer, tapeData.byteOffset, tapeData.byteLength);
-        console.log("Raw tapeData.buffer bytes:", Array.from(tapeBytes));
-        device.queue.writeBuffer(tapeBuffer, 0, tapeBytes, 0, tapeLength * 8);
+class ComputePipeline {
+    tapeBindGroupLayout!: GPUBindGroupLayout;
+    outputBindGroupLayout!: GPUBindGroupLayout;
 
-        const outputTexture = device.createTexture({
-            label: "Output texture",
-            size: [outputImageWidth, outputImageHeight],
-            format: 'rgba8unorm',
-            usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING
-        });
+    tape?: {
+        buffer: GPUBuffer,
+        bindGroup: GPUBindGroup
+    }
 
-        // MARK: pipeline, bindgroup, sahder creation
-        const shader = await fetch("shader.wgsl")
-        const shaderSource = await shader.text();
+    outputTexture!: GPUTexture;
+    outputBindGroup!: GPUBindGroup;
 
-        const computeBindGroupLayout = device.createBindGroupLayout({
-            label: "Compute bind group layout",
+    pipeline!: GPUComputePipeline;
+
+    // No async constructors :(
+    async init(gpu: WebGPUState) {
+        this.outputBindGroupLayout = gpu.device.createBindGroupLayout({
+            label: "Compute bind group layout - output",
             entries: [
                 {
                     binding: 0,
-                    visibility: GPUShaderStage.COMPUTE,
-                    buffer: {
-                        type: "read-only-storage"
-                    }
-                },
-                {
-                    binding: 1,
                     visibility: GPUShaderStage.COMPUTE,
                     storageTexture: {
                         format: "rgba8unorm",
@@ -161,42 +175,124 @@ const outputImageScale = (1024 / 64);
             ]
         });
 
-        const computeBindGroup = device.createBindGroup({
-            label: "Compute bind group",
-            layout: computeBindGroupLayout,
+        this.tapeBindGroupLayout = gpu.device.createBindGroupLayout({
+            label: "Compute bind group layout - tape",
             entries: [
                 {
                     binding: 0,
-                    resource: {
-                        buffer: tapeBuffer
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "read-only-storage"
                     }
                 },
+            ]
+        });
+
+        this.outputTexture = gpu.device.createTexture({
+            label: "Output texture",
+            size: [outputImageWidth, outputImageHeight],
+            format: 'rgba8unorm',
+            usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING
+        });
+
+        this.outputBindGroup = gpu.device.createBindGroup({
+            label: "Compute bind group - output",
+            layout: this.outputBindGroupLayout,
+            entries: [
                 {
-                    binding: 1,
-                    resource: outputTexture.createView({
+                    binding: 0,
+                    resource: this.outputTexture.createView({
                         dimension: "2d",
                     })
                 }
             ]
         });
 
-        const computePipeline = device.createComputePipeline({
+        const computeShader = await (async () => {
+            const shader = await fetch("shader.wgsl");
+            return await shader.text();
+        })();
+
+        this.pipeline = gpu.device.createComputePipeline({
             label: "Compute pipeline",
-            layout: device.createPipelineLayout({
-                bindGroupLayouts: [computeBindGroupLayout]
+            layout: gpu.device.createPipelineLayout({
+                bindGroupLayouts: [this.outputBindGroupLayout, this.tapeBindGroupLayout]
             }),
             compute: {
-                module: device.createShaderModule({
-                    code: shaderSource
+                module: gpu.device.createShaderModule({
+                    code: computeShader
                 })
             },
         });
+    }
 
-        const renderPipeline = device.createRenderPipeline({
+    uploadTape(gpu: WebGPUState, tapeBuf: Uint8Array) {
+        if (this.tape) {
+            this.tape.buffer.destroy();
+            // TODO: do we need to destroy bindgroup or is that simple GC'd
+
+            this.tape = undefined;
+        }
+
+        const buffer = gpu.device.createBuffer({
+            label: `Tape buffer ${Date.now().toString(16)}-${Math.floor(Math.random() * 1e8).toString(16)}`,
+            size: tapeBuf.length,
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+        });
+
+        console.log('About to write:', {
+            bufferLabel: buffer.label,
+            bufferSize: buffer.size,
+            dataLength: tapeBuf.length,
+            dataOffset: tapeBuf.byteOffset,
+            firstBytes: Array.from(tapeBuf.slice(0, 4))
+        });
+
+        gpu.device.queue.writeBuffer(buffer, 0, tapeBuf.buffer, tapeBuf.byteOffset, tapeBuf.length);
+
+        const bindGroup = gpu.device.createBindGroup({
+            label: "Compute bind group - tape",
+            layout: this.tapeBindGroupLayout,
+            entries: [
+                {
+                    binding: 0,
+                    resource: {
+                        buffer: buffer
+                    }
+                },
+            ]
+        });
+
+        this.tape = {
+            bindGroup,
+            buffer
+        };
+    }
+
+    encode(encoder: GPUCommandEncoder) {
+        if (this.tape === undefined) {
+            throw new Error("No tape defined");
+        }
+
+        const pass = encoder.beginComputePass({ label: "Compute pass" });
+        pass.setPipeline(this.pipeline);
+        pass.setBindGroup(0, this.outputBindGroup);
+        pass.setBindGroup(1, this.tape.bindGroup);
+        pass.dispatchWorkgroups(64, 64);
+        pass.end();
+    }
+}
+
+class RenderPipleine {
+    pipeline!: GPURenderPipeline;
+    bindGroup!: GPUBindGroup;
+
+    async init(gpu: WebGPUState, inputTexture: GPUTexture) {
+        this.pipeline = gpu.device.createRenderPipeline({
             label: "Blit pipeline",
             layout: "auto",
             vertex: {
-                module: device.createShaderModule({
+                module: gpu.device.createShaderModule({
                     code: `
                         @vertex
                         fn main(@builtin(vertex_index) VertexIndex : u32) -> @builtin(position) vec4<f32> {
@@ -215,10 +311,10 @@ const outputImageScale = (1024 / 64);
                 entryPoint: "main"
             },
             fragment: {
-                module: device.createShaderModule({
+                module: gpu.device.createShaderModule({
                     code: `
                         @group(0) @binding(0) var myTexture: texture_2d<f32>;
-
+    
                         @fragment
                         fn main(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
                             // Convert pixel coordinates to normalized [0,1] UVs
@@ -231,7 +327,7 @@ const outputImageScale = (1024 / 64);
                 entryPoint: "main",
                 targets: [
                     {
-                        format: navigator.gpu.getPreferredCanvasFormat()
+                        format: gpu.canvasFormat
                     }
                 ]
             },
@@ -240,49 +336,111 @@ const outputImageScale = (1024 / 64);
             }
         });
 
-        // Create a bind group for the render pipeline
-        const renderBindGroup = device.createBindGroup({
-            layout: renderPipeline.getBindGroupLayout(0),
+        this.bindGroup = gpu.device.createBindGroup({
+            layout: this.pipeline.getBindGroupLayout(0),
             entries: [
                 {
                     binding: 0,
-                    resource: outputTexture.createView()
+                    resource: inputTexture.createView()
+                }
+            ]
+        });
+    }
+
+    encode(encoder: GPUCommandEncoder, outputView: GPUTextureView) {
+        const renderPass = encoder.beginRenderPass({
+            colorAttachments: [
+                {
+                    view: outputView,
+                    clearValue: { r: 0, g: 0, b: 0, a: 1 },
+                    loadOp: "clear",
+                    storeOp: "store"
                 }
             ]
         });
 
-        // MARK: pass run
-        while (true) {
-            console.log("Having a go!");
-            const encoder = device.createCommandEncoder({ label: "Compute & render encoder" });
-            const computePass = encoder.beginComputePass({ label: "Compute builtin pass " });
+        renderPass.setPipeline(this.pipeline);
+        renderPass.setBindGroup(0, this.bindGroup);
+        renderPass.draw(6, 1, 0, 0); // Draw 2 triangles (6 vertices) for the quad
+        renderPass.end();
+    }
+}
 
-            computePass.setPipeline(computePipeline);
-            computePass.setBindGroup(0, computeBindGroup);
-            computePass.dispatchWorkgroups(64, 64);
-            computePass.end();
+// Thanks, Claude!
+function setupDebouncedTextarea(
+    textarea: HTMLTextAreaElement,
+    callback: (value: string) => void,
+    delay: number = 300
+): AbortController {
+    const controller = new AbortController();
+    let timeoutId: number;
 
-            const renderPass = encoder.beginRenderPass({
-                colorAttachments: [
-                    {
-                        view: context.getCurrentTexture().createView(),
-                        clearValue: { r: 0, g: 0, b: 0, a: 1 },
-                        loadOp: "clear",
-                        storeOp: "store"
-                    }
-                ]
-            });
+    textarea.addEventListener('input', (event) => {
+        clearTimeout(timeoutId);
+        const target = event.target as HTMLTextAreaElement;
 
-            renderPass.setPipeline(renderPipeline);
-            renderPass.setBindGroup(0, renderBindGroup);
-            renderPass.draw(6, 1, 0, 0); // Draw 2 triangles (6 vertices) for the quad
-            renderPass.end();
+        timeoutId = setTimeout(() => {
+            if (!controller.signal.aborted) {
+                callback(target.value);
+            }
+        }, delay);
+    }, { signal: controller.signal });
 
+    return controller; // Call controller.abort() to cleanup
+}
 
+const outputImageWidth = 512;
+const outputImageHeight = 512;
+const outputImageScale = (512 / 64);
+
+(async () => {
+    const wasm = new WasmModule();
+    await wasm.init();
+
+    const webgpu = new WebGPUState();
+    await webgpu.init();
+
+    const compute = new ComputePipeline();
+    await compute.init(webgpu);
+
+    const render = new RenderPipleine();
+    await render.init(webgpu, compute.outputTexture);
+
+    const inputArea: HTMLTextAreaElement = document.querySelector("#input")!;
+
+    const run = (text: string) => {
+        const buf = wasm.compile(text);
+
+        if (buf.type === "error") {
+            console.log(`buf.msg ptr: ${buf.msg.ptr}, len: ${buf.msg.len}`);
+            console.log(`So sad an error got reported ${wasm.getString(buf.msg)}`);
+        } else {
+            console.log(`buf.insts ptr: ${buf.insts.ptr}, len: ${buf.insts.len}`);
+            const tapeData = wasm.getDataView(buf.insts, 0);
+
+            for (let i = 0; i < buf.insts.len; i += 8) {
+                const opcode = tapeData.getUint8(i + 3);
+                const output = tapeData.getUint8(i + 2);
+                const rhs = tapeData.getUint8(i + 1);
+                const lhs = tapeData.getUint8(i);
+
+                console.log(`r${output} = op(${opcode}) r${lhs} r${rhs} (imm: ${tapeData.getFloat32(i + 4, true)})`);
+            }
+
+            compute.uploadTape(webgpu, wasm.getUint8Array(buf.insts, 0));
+
+            const encoder = webgpu.device.createCommandEncoder({ label: "Compute & render encoder" });
+            compute.encode(encoder);
+            render.encode(encoder, webgpu.canvasContext.getCurrentTexture().createView());
             const commandBuffer = encoder.finish();
-            device.queue.submit([commandBuffer]);
-            await new Promise(resolve => setTimeout(resolve, 1000));
+            webgpu.device.queue.submit([commandBuffer]);
         }
-    });
+    }
+
+    setupDebouncedTextarea(inputArea, (val) => {
+        run(val);
+    }, 100);
+
+    run(inputArea.textContent!); // called once here to render the initial textarea value 
 })();
 

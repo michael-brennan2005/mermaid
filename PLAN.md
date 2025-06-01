@@ -40,15 +40,19 @@ TODO (DONE): Make RegAlloc emit encoded instructions & eliminate inst encoding s
 TODO (DONE): Fix/build subexpression elimination
 TODO (DONE): Go and implement the rest of the grammar
 TODO (DONE): simplify advance functions in the parser
+TODO (DONE): Refactor script.ts, give compute and render pipeline their own structs, init functions for webgpu, maybe break into multiple files and setup a webpack (hell nah)
+TODO (DONE): Proper UI and connect input to compilation
 
+Tier 0.5 issues (get this deployed)
+TODO: error handling
+TODO: implement the rest of the interval math in shader
+TODO: deploy this on your site
 
 Tier 1 issues (road to v2)
-TODO: Refactor script.ts, give compute and render pipeline their own structs, init functions for webgpu, maybe break into multiple files and setup a webpack (hell nah)
-TODO: Proper UI and connect input to compilation
+
 TODO: figure out uniforms, storing image width/height, scale, etc.
 TODO: camera implementation/setting up a more legitimate render pass
-TODO: error handling
-TODO: deploy this on your site
+
 
 Tier 2 issues
 TODO: 3d support
@@ -56,18 +60,28 @@ TODO: subinterval evaluation
     - Need to figure out how the data flow works, how subintervals get stored somewhere, how
     subsequent dispatch call works
 TODO: tape pruning
+TODO: code quality - alloc vs gpa for std.mem.Allocator
+TODO: code quality - zig->js encoding cleanup
 
 Tier 3 issues
+TODO: timings for rendering and parsing
 TODO: support numbers in form of ".32"
 TODO: Cleaning up parsing
     - Token.Op -> Opcode functoins (fromFunc1 and fromFunc2) seem icky, maybe make more sense for one
     function that handles args, constants, binops, etc. Token -> Opcode
     - May be better for Token.Op to be split into multiple - func1s and func2s are all parsed same,
     but ops are not (diff. precedence levels). Would eliminate need for advanceIfOp function
+    - Can SSA just be given the tokenization iterator instead of a full slice of tokens
 TODO: would log be better off as a 2 argument function? log_a(b)
 TODO: Prickly OCD thing but shader uses hex opcodes whereas frontend Type.Opcode uses decimal opcodes
 TODO: let variable bindings, proper scripting language vibe
-TODO: profile and find out why parsing takes forever
+TODO: better webgpu labels
+TODO: profile, profile, profile
+    - why does parsing take so long
+    - creating new buffer for every new tape seems like a lot of overhead, investigate/maybe replace with fixed size buffer or something
+        - Idea could be if new buffer size > old buffer resize, otherwise reuse old buffer, introduce uniform to track tapelength
+TODO: constants - like PI (may be unneccessary with variable bindings lowkey)
+TODO: wgsl shader cleanup
 
 # Strategic scratchpad
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
@@ -83,5 +97,20 @@ TODO: profile and find out why parsing takes forever
         approach.
         - IDEA: RegAlloc allocates a buffer of u64s, 1 per instruction (each clause takes 8 bytes),
         instead of outputting Types.Inst it writes directly to that buffer (using current encodeInst function)
-        - 
-        
+    - No seperate error handling route cause that creates a weird dependency/codepath issue
+        - compile needs to return union
+        - Successful compilation: <0x0> <4 bytes for inst length> <instructions>
+        - Error: <0x1> <4 bytes for message length> <message length>
+        - Rn - this is a dogshit way of implementing it with encodeError in main.zig and frontend.RegAlloc.do doing encoding there, fiigure out nice way for this
+            - Seems a central pattern could be <type code><# of bytes><data>, which JS/TS interprets however
+
+        - Encoding 
+            - DW about performance stuff right now because its really just all conjecture/not all that trained instincts
+            - Centralized format of <1 byte for message type><4 bytes for payload size><payload>
+                - Keep encoding in main.zig and WasmInstance
+            - Should slices be deep copied or returned references?
+                - Question of how exposed Zig-side should be and I think it makes sense for details 
+                to be exposed, right now we have very simple values but in future there may be cases
+                where deep copying doesnt make sense
+                - Also reduces copying which is nice, we already have easy access to wasm memory 
+             

@@ -1,10 +1,62 @@
+const PI = radians(180);
+
+fn sin_interval(int: Interval) -> Interval {
+    // return extremes if interval is larger than a full period
+    if (int.max - int.min > (2 * PI)) {
+        return Interval(-1, 1);
+    }
+
+    let a = int.min;
+    let b = int.max;
+    
+    var min_val = min(sin(a),sin(b));
+    var max_val = max(sin(a),sin(b));
+
+    // Scan over all minima (x = pi/2 + npi)
+    let n = ceil((a - PI/2.0) / PI);
+    var x = PI/2 + n * PI;
+    while (x <= b) {
+        min_val = min(min_val, sin(x));
+        max_val = max(max_val, sin(x));
+        x += PI;
+    }
+
+    return Interval(min_val, max_val);
+}
+
+fn mul_interval(int1: Interval, int2: Interval) -> Interval {
+    let a = int1.min * int2.min;
+    let b = int1.min * int2.max;
+    let c = int1.max * int2.min;
+    let d = int1.max * int2.max;
+                
+    return Interval(
+        min(min(a,b),min(c,d)),
+        max(max(a,b),max(c,d)));
+}
+
+// [a,b] -> [1/a, 1/b]
+fn reciprocal_interval(int: Interval) -> Interval {
+    const inf: f32 = 1e30;
+
+    let a = int.min;
+    let b = int.max;
+
+    // 0 in interval 
+    if (a <= 0 && 0 <= b) {
+        return Interval(-inf, inf);
+    } else {
+        return Interval (1 / int.max, 1 / int.min);
+    }
+}
+
 struct Interval {
     min: f32,
     max: f32
 }
 
-@group(0) @binding(0) var<storage, read> tape: array<u32>;
-@group(0) @binding(1) var output: texture_storage_2d<rgba8unorm, write>;
+@group(0) @binding(0) var output: texture_storage_2d<rgba8unorm, write>;
+@group(1) @binding(0) var<storage, read> tape: array<u32>;
 
 @compute @workgroup_size(1)
 fn main(@builtin(global_invocation_id) id: vec3u) {
@@ -42,26 +94,20 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
                     regs[in1].max - regs[in2].min);
             }
             case 0x5: {
-                let a = regs[in1].min * regs[in2].min;
-                let b = regs[in1].min * regs[in2].max;
-                let c = regs[in1].max * regs[in2].min;
-                let d = regs[in1].max * regs[in2].max;
-                
-                regs[out] = Interval(
-                    min(min(a,b),min(c,d)),
-                    max(max(a,b),max(c,d)));
+                regs[out] = mul_interval(regs[in1], regs[in2]);
             }
+
             case 0x6: {
-                // div
+                regs[out] = mul_interval(regs[in1], reciprocal_interval(regs[in2]));
             }
             case 0x7: {
-                // sqrt
+                regs[out] = Interval(sqrt(regs[in1].min), sqrt(regs[in1].max));
             }
             case 0x8: {
-                // sin
+                regs[out] = sin_interval(regs[in1]);
             }
             case 0x9: {
-                // cos
+                regs[out] = sin_interval(Interval(regs[in1].min + PI/2.0, regs[in1].max + PI/2.0));
             }
             case 0xA: {
                 // asin
@@ -84,10 +130,14 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
                     max(abs(regs[in1].min), abs(regs[in1].max)));
             }
             case 0x10: {
-                // min
+                regs[out] = Interval(
+                    min(regs[in1].min, regs[in2].min),
+                    min(regs[in1].max, regs[in2].max));
             }
             case 0x11: {
-                // max
+                regs[out] = Interval(
+                    max(regs[in1].min, regs[in2].min),
+                    max(regs[in1].max, regs[in2].max));
             }
             default: {
                 continue;
@@ -107,8 +157,8 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 
 // Bounds is interval-space [x1,x2,y1,y2]
 fn fillTile(bounds: vec4<f32>, color: vec4<f32>) {
-    for (var x: u32 = u32(bounds[0] + 32) * 16; x < u32(bounds[1] + 32) * 16; x += 1) {
-        for (var y: u32 = u32(bounds[2] + 32) * 16; y < u32(bounds[3] + 32) * 16; y += 1) {
+    for (var x: u32 = u32(bounds[0] + 32) * 8; x < u32(bounds[1] + 32) * 8; x += 1) {
+        for (var y: u32 = u32(bounds[2] + 32) * 8; y < u32(bounds[3] + 32) * 8; y += 1) {
             textureStore(output, vec2i(i32(x), i32(y)), color);
         }
     }

@@ -1,26 +1,51 @@
 <!DOCTYPE html>
 <html lang="en">
+
 <head>
     <meta charset="UTF-8">
-    <title>Teddy WASM Demo</title>
+    <title>Mermaid</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <!-- You can add your CSS here -->
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/water.css@2/out/light.css">
 </head>
+
 <body>
-    <div id="app">
-        <h1>Teddy WASM Demo</h1>
-        <p>Enter an expression to compile:</p>
-        <textarea id="input" placeholder="e.g. x + y * 2"></textarea>
-        <br>
-        <button id="compileBtn">Compile</button>
-        <h2>Output</h2>
-        <pre id="output">(output will appear here)</pre>
-        <canvas id="webgpu-canvas" width="1024" height="1024" style="border:1px solid #ccc; display:block; margin: 1em 0;">
+    <div style="display: flex; flex-direction: row; justify-content: space-between; align-items: end;">
+        <div>
+            <h1>Mermaid</h1>
+            <p>A successor to <a href="https://michael-brennan.com/blog/august2023_oceanman">oceanman</a></p>
+        </div>
+        <p>Version 0.1</p>
+    </div>
+    <div id="app" style="display: flex; flex-direction: row; align-items: flex-start; gap: 2em;">
+        <textarea id="input" style="
+                width: 512px; 
+                min-width: 300px;
+                height: 512px; 
+                min-height: 400px;
+                resize: vertical;
+                display: block; 
+                margin: 1em 0; 
+                box-sizing: border-box;
+                font-size: 1.1em;
+                line-height: 1.4;
+            ">x*x*x*x + y*y*y*y - x*x*y - 1.0</textarea>
+        <canvas id="webgpu-canvas" width="512" height="512"
+            style="border:1px solid #ccc; display:block; margin: 1em 0;">
             Your browser does not support the HTML5 canvas tag.
         </canvas>
     </div>
-    
+
+    <h1>What's an implicit surface</h1>
+    <p>An implicit surface is a 3d shape defined by an equation F(x, y, z) = 0. Implicit surfaces offer easy CSG
+        operations and can be far more compact than traditional 3D shape representations, which model shapes using
+        individual triangle and point data. </p>
+    <h1>What's Mermaid</h1>
+    <p>Mermaid is an implicit surface renderer built with Zig and WebGPU. The core implementation is based off Matthew
+        J. Keeter's paper <a href="https://www.mattkeeter.com/research/mpr/">Massively Parallel Rendering of Complex
+            Closed-Form Implicit Surfaces</a>. This project wouldn't be possible without his work, thank you Matthew!
+    </p>
     <script src="script.js"></script>
 </body>
+
 </html>

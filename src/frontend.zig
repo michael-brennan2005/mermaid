@@ -5,6 +5,35 @@ const print = @import("./main.zig").print;
 
 const little_endian = std.builtin.Endian.little;
 
+pub const CompilationError = struct {
+    tag: Tag,
+    msg: [:0]const u8,
+
+    // TODO: add one for OOM-style errors
+    pub const Tag = enum { Tokenization, Parsing };
+
+    // bit redundant for now but will be useful later when we want formatted error msgs
+    pub fn init(tag: Tag, msg: [:0]const u8) CompilationError {
+        return CompilationError{
+            .tag = tag,
+            .msg = msg,
+        };
+    }
+
+    pub fn toString(self: *const CompilationError, alloc: std.mem.Allocator) []const u8 {
+        var buf = std.ArrayList(u8).init(alloc);
+        const writer = buf.writer();
+
+        std.fmt.format(writer, "{s}Error: {s}", .{ @tagName(self.tag), self.msg }) catch {
+            @panic("TODO: handle this");
+        };
+
+        return buf.toOwnedSlice() catch {
+            @panic("TODO: handle this");
+        };
+    }
+};
+
 // Allow SSA and RegAlloc to share types (and eventually tokenizer)
 pub const Types = struct {
     pub const Opcode = enum(u8) {
@@ -106,13 +135,14 @@ pub const Types = struct {
 
 // Text -> Tokens
 pub const Tokenizer = struct {
+    error_msg: ?[:0]const u8 = null,
     buffer: [:0]const u8,
     index: usize,
 
-    pub fn do(gpa: std.mem.Allocator, buffer: [:0]const u8) ![]Types.Token {
+    pub fn do(gpa: std.mem.Allocator, buffer: [:0]const u8, err: *?CompilationError) ![]Types.Token {
         var tokenizer = Tokenizer{ .buffer = buffer, .index = 0 };
         var arr = std.ArrayList(Types.Token).init(gpa);
-        while (try tokenizer.next()) |tok| {
+        while (try tokenizer.next(err)) |tok| {
             try arr.append(tok);
         }
         return arr.toOwnedSlice();
@@ -121,7 +151,8 @@ pub const Tokenizer = struct {
     // TODO: support numbers in form of ".32"
     const State = enum { start, int, float, identifier };
 
-    pub fn next(self: *Tokenizer) !?Types.Token {
+    const Error = error{TokenError};
+    pub fn next(self: *Tokenizer, err: *?CompilationError) Error!?Types.Token {
         var start: usize = 0;
         state: switch (State.start) {
             .start => switch (self.buffer[self.index]) {
@@ -129,7 +160,8 @@ pub const Tokenizer = struct {
                     if (self.index == self.buffer.len) {
                         return null;
                     } else {
-                        @panic("TODO error: null not at end of string");
+                        err.* = CompilationError.init(.Tokenization, "expected null terminator at end of string");
+                        return Error.TokenError;
                     }
                 },
                 ' ', '\n', '\t', '\r' => {
@@ -169,7 +201,8 @@ pub const Tokenizer = struct {
                     continue :state .int;
                 },
                 else => {
-                    @panic("TODO error: unexpected character");
+                    err.* = CompilationError.init(.Tokenization, "unexpected character");
+                    return Error.TokenError;
                 },
             },
             .int => {
@@ -183,7 +216,8 @@ pub const Tokenizer = struct {
                     },
                     else => {
                         const val = std.fmt.parseInt(usize, self.buffer[start..self.index], 10) catch {
-                            @panic("TODO error: int is misformed (can this even be reached?)");
+                            err.* = CompilationError.init(.Tokenization, "unable to parse integer");
+                            return Error.TokenError;
                         };
 
                         return Types.Token{
@@ -200,7 +234,8 @@ pub const Tokenizer = struct {
                     },
                     else => {
                         const val = std.fmt.parseFloat(f32, self.buffer[start..self.index]) catch {
-                            @panic("TODO error: float is misformed (can this even be reached?)");
+                            err.* = CompilationError.init(.Tokenization, "unable to parse float");
+                            return Error.TokenError;
                         };
 
                         return Types.Token{
@@ -219,7 +254,8 @@ pub const Tokenizer = struct {
                         if (getIdentifierToken(self.buffer[start..self.index])) |tok| {
                             return tok;
                         } else {
-                            @panic("TODO error: identifier is misformed");
+                            err.* = CompilationError.init(.Tokenization, "unexpected identifier");
+                            return Error.TokenError;
                         }
                     },
                 }
@@ -261,18 +297,20 @@ pub const Tokenizer = struct {
 
 // Tokens -> SSA
 pub const Parser = struct {
+    err: *?CompilationError,
     index: usize,
     toks: []Types.Token,
     insts: std.ArrayList(Types.SSA),
     // Keeping a cache allows for subexpression elimination
     cache: std.AutoHashMap(Types.SSA, usize),
 
-    pub fn do(gpa: std.mem.Allocator, toks: []Types.Token) ![]Types.SSA {
+    pub fn do(gpa: std.mem.Allocator, toks: []Types.Token, err: *?CompilationError) ![]Types.SSA {
         var parser = Parser{
             .index = 0,
             .cache = std.AutoHashMap(Types.SSA, usize).init(gpa),
             .insts = std.ArrayList(Types.SSA).init(gpa),
             .toks = toks,
+            .err = err,
         };
         defer parser.cache.deinit();
 
@@ -280,25 +318,20 @@ pub const Parser = struct {
         return parser.insts.toOwnedSlice();
     }
 
-    const ParseError = error{ ParseFailed, OutOfMemory };
+    const Error = error{ParseError};
 
-    fn parse(self: *Parser) ParseError!void {
-        print("parse at idx {d}", .{self.index});
+    fn parse(self: *Parser) Error!void {
         _ = try self.parseExpr();
     }
 
-    fn parseExpr(self: *Parser) ParseError!Types.Input {
-        print("parseExpr at idx {d}", .{self.index});
+    fn parseExpr(self: *Parser) Error!Types.Input {
         var lhs = try self.parseTerm();
 
         while (true) {
-            print("parseExpr (inner loop) at idx {d}", .{self.index});
             if (self.advanceIfOp(Types.Token.Op.add)) {
-                print("parseExpr at idx {d} - add token hit", .{self.index});
                 const rhs = try self.parseTerm();
                 lhs = try self.addInst(Types.SSA.binOp(.add, lhs, rhs));
             } else if (self.advanceIfOp(Types.Token.Op.sub)) {
-                print("parseExpr at idx {d} - sub token hit", .{self.index});
                 const rhs = try self.parseTerm();
                 lhs = try self.addInst(Types.SSA.binOp(.sub, lhs, rhs));
             } else {
@@ -309,12 +342,10 @@ pub const Parser = struct {
         return lhs;
     }
 
-    fn parseTerm(self: *Parser) ParseError!Types.Input {
-        print("parseTerm at idx {d}", .{self.index});
+    fn parseTerm(self: *Parser) Error!Types.Input {
         var lhs = try self.parseFactor();
 
         while (true) {
-            print("parseTerm (inner loop) at idx {d}", .{self.index});
             if (self.advanceIfOp(Types.Token.Op.mul)) {
                 const rhs = try self.parseFactor();
                 lhs = try self.addInst(Types.SSA.binOp(.mul, lhs, rhs));
@@ -326,17 +357,16 @@ pub const Parser = struct {
             }
         }
 
-        print("Exiting parseTerm at idx {d}", .{self.index});
         return lhs;
     }
 
-    fn parseFactor(self: *Parser) ParseError!Types.Input {
-        print("parseFactor at idx {d}", .{self.index});
+    fn parseFactor(self: *Parser) Error!Types.Input {
         if (self.advanceIf(.left_paren)) |_| {
             const expr = try self.parseExpr();
 
             if (self.advanceIf(.right_paren) == null) {
-                @panic("TODO error: no right paren");
+                self.err.* = CompilationError.init(.Parsing, "expected right paren");
+                return Error.ParseError;
             }
 
             return expr;
@@ -355,13 +385,15 @@ pub const Parser = struct {
 
         if (self.advanceIf(.func1)) |func1| {
             if (self.advanceIf(.left_paren) == null) {
-                @panic("TODO error: no left paren");
+                self.err.* = CompilationError.init(.Parsing, "expected left paren after function name");
+                return Error.ParseError;
             }
 
             const expr = try self.parseExpr();
 
             if (self.advanceIf(.right_paren) == null) {
-                @panic("TODO error: no right paren");
+                self.err.* = CompilationError.init(.Parsing, "expected right paren after function arg");
+                return Error.ParseError;
             }
 
             return try self.addInst(Types.SSA.unaryOp(Types.Opcode.fromFunc1(func1), expr));
@@ -369,25 +401,29 @@ pub const Parser = struct {
 
         if (self.advanceIf(.func2)) |func2| {
             if (self.advanceIf(.left_paren) == null) {
-                @panic("TODO error: no left paren");
+                self.err.* = CompilationError.init(.Parsing, "expected left paren after function name");
+                return Error.ParseError;
             }
 
             const lhs = try self.parseExpr();
 
             if (self.advanceIf(.comma) == null) {
-                @panic("TODO error: expected comma");
+                self.err.* = CompilationError.init(.Parsing, "expected comma after first expr");
+                return Error.ParseError;
             }
 
             const rhs = try self.parseExpr();
 
             if (self.advanceIf(.right_paren) == null) {
-                @panic("TODO error: no right paren");
+                self.err.* = CompilationError.init(.Parsing, "expected right paren after function arg");
+                return Error.ParseError;
             }
 
             return try self.addInst(Types.SSA.binOp(Types.Opcode.fromFunc2(func2), lhs, rhs));
         }
 
-        @panic("TODO error: we get to this point");
+        self.err.* = CompilationError.init(.Parsing, "expected left paren, val, arg, or function");
+        return Error.ParseError;
     }
 
     fn advanceIf(
@@ -429,14 +465,20 @@ pub const Parser = struct {
         return self.toks[self.index - 1];
     }
 
-    fn addInst(self: *Parser, inst: Types.SSA) ParseError!Types.Input {
-        print("Adding instruction of opcode {s}", .{@tagName(inst.op)});
+    fn addInst(self: *Parser, inst: Types.SSA) Error!Types.Input {
         if (self.cache.get(inst)) |idx| {
             return idx;
         } else {
-            self.insts.append(inst) catch return ParseError.OutOfMemory;
+            self.insts.append(inst) catch {
+                self.err.* = CompilationError.init(.Parsing, "OOM error appending to insts");
+                return Error.ParseError;
+            };
             const i = self.insts.items.len - 1;
-            self.cache.put(inst, i) catch return ParseError.OutOfMemory;
+            self.cache.put(inst, i) catch {
+                // TODO: actually fine if this fails? just means we lose out on some optimization
+                self.err.* = CompilationError.init(.Parsing, "OOM error appending to cache");
+                return Error.ParseError;
+            };
             return i;
         }
     }
@@ -456,15 +498,13 @@ pub const RegAlloc = struct {
     pub fn do(gpa: std.mem.Allocator, ssa: []Types.SSA) ![]u8 {
         var regAlloc = RegAlloc{
             .ssa = ssa,
-            .output = try gpa.alloc(u8, 4 + (8 * ssa.len)),
+            .output = try gpa.alloc(u8, 8 * ssa.len),
             .active = std.AutoHashMap(usize, usize).init(gpa),
             .free = std.ArrayList(usize).init(gpa),
             .r = 0,
         };
         defer regAlloc.active.deinit();
         defer regAlloc.free.deinit();
-
-        std.mem.writeInt(u32, regAlloc.output[0..4], ssa.len, little_endian);
 
         var i: usize = regAlloc.ssa.len;
         while (i > 0) {
@@ -505,13 +545,12 @@ pub const RegAlloc = struct {
         // Logically, we'd like to think of encoded inst as <opcode: byte><output: byte><lhs: byte><rhs: byte><imm: f32>
         // So, we encode the opcode, output, lhs, byte in reverse order, and immediate in the next u32
 
-        const start = 4 + (idx * 8);
+        const start = (idx * 8);
 
         self.output[start] = rhs;
         self.output[start + 1] = lhs;
         self.output[start + 2] = out;
         self.output[start + 3] = @intFromEnum(opcode);
-        print("F32: {d} -> U32: {d}", .{ @as(f32, @bitCast(imm)), imm });
 
         std.mem.writeInt(u32, @ptrCast(self.output.ptr + start + 4), imm, std.builtin.Endian.little);
     }

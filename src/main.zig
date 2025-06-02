@@ -85,6 +85,6 @@ export fn compile(addr: usize, len: usize) u32 {
 
     const buf = encoding.encodeInsts(alloc, bytes);
 
-    print("Buffer being sent is {any}", .{buf});
+    print("Buffer ff sent is {any}", .{buf});
     return @intFromPtr(buf.ptr);
 }

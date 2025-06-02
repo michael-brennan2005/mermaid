@@ -407,6 +407,7 @@ const outputImageScale = (512 / 64);
     await render.init(webgpu, compute.outputTexture);
 
     const inputArea: HTMLTextAreaElement = document.querySelector("#input")!;
+    const compileErrorOutput: HTMLHeadingElement = document.querySelector("#error-msg")!;
 
     const run = (text: string) => {
         const buf = wasm.compile(text);
@@ -414,8 +415,14 @@ const outputImageScale = (512 / 64);
         if (buf.type === "error") {
             console.log(`buf.msg ptr: ${buf.msg.ptr}, len: ${buf.msg.len}`);
             console.log(`So sad an error got reported ${wasm.getString(buf.msg)}`);
+
+            compileErrorOutput.textContent = wasm.getString(buf.msg);
+            compileErrorOutput.style.display = "block";
         } else {
             console.log(`buf.insts ptr: ${buf.insts.ptr}, len: ${buf.insts.len}`);
+            compileErrorOutput.textContent = "";
+            compileErrorOutput.style.display = "none";
+
             const tapeData = wasm.getDataView(buf.insts, 0);
 
             for (let i = 0; i < buf.insts.len; i += 8) {

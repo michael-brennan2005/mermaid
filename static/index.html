@@ -15,21 +15,29 @@
             <h1>Mermaid</h1>
             <p>A successor to <a href="https://michael-brennan.com/blog/august2023_oceanman">oceanman</a></p>
         </div>
-        <p>Version 0.1</p>
+        <a href="https://michael-brennan.com">my personal site!</a>
     </div>
     <div id="app" style="display: flex; flex-direction: row; align-items: flex-start; gap: 2em;">
-        <textarea id="input" style="
-                width: 512px; 
-                min-width: 300px;
-                height: 512px; 
-                min-height: 400px;
-                resize: vertical;
-                display: block; 
-                margin: 1em 0; 
+        <div style="
+        display: flex;
+        flex-direction: column;
+        width: 512px; 
+        min-width: 300px;
+        height: 512px; 
+        min-height: 400px;
+        resize: vertical;
+        display: block; 
+        margin: 1em 0;">
+            <textarea id="input" style="
                 box-sizing: border-box;
                 font-size: 1.1em;
                 line-height: 1.4;
+                margin-bottom: 1em;
+                resize: vertical;
+                display: block;
             ">x*x*x*x + y*y*y*y - x*x*y - 1.0</textarea>
+            <h5 id="error-msg" style="border: 2px solid red; border-radius: 16px; padding: 0.5em; font-size: 1em;">Error</h5>
+        </div>
         <canvas id="webgpu-canvas" width="512" height="512"
             style="border:1px solid #ccc; display:block; margin: 1em 0;">
             Your browser does not support the HTML5 canvas tag.

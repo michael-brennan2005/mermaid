@@ -42,10 +42,11 @@ TODO (DONE): Go and implement the rest of the grammar
 TODO (DONE): simplify advance functions in the parser
 TODO (DONE): Refactor script.ts, give compute and render pipeline their own structs, init functions for webgpu, maybe break into multiple files and setup a webpack (hell nah)
 TODO (DONE): Proper UI and connect input to compilation
+TODO (DONE): code quality - zig->js encoding cleanup
+TODO (DONE): implement the rest of the interval math in shader
 
 Tier 0.5 issues (get this deployed)
 TODO: error handling
-TODO: implement the rest of the interval math in shader
 TODO: deploy this on your site
 
 Tier 1 issues (road to v2)
@@ -61,7 +62,6 @@ TODO: subinterval evaluation
     subsequent dispatch call works
 TODO: tape pruning
 TODO: code quality - alloc vs gpa for std.mem.Allocator
-TODO: code quality - zig->js encoding cleanup
 
 Tier 3 issues
 TODO: timings for rendering and parsing
@@ -72,7 +72,6 @@ TODO: Cleaning up parsing
     - May be better for Token.Op to be split into multiple - func1s and func2s are all parsed same,
     but ops are not (diff. precedence levels). Would eliminate need for advanceIfOp function
     - Can SSA just be given the tokenization iterator instead of a full slice of tokens
-TODO: would log be better off as a 2 argument function? log_a(b)
 TODO: Prickly OCD thing but shader uses hex opcodes whereas frontend Type.Opcode uses decimal opcodes
 TODO: let variable bindings, proper scripting language vibe
 TODO: better webgpu labels
@@ -82,6 +81,7 @@ TODO: profile, profile, profile
         - Idea could be if new buffer size > old buffer resize, otherwise reuse old buffer, introduce uniform to track tapelength
 TODO: constants - like PI (may be unneccessary with variable bindings lowkey)
 TODO: wgsl shader cleanup
+TODO: line and column info for errors
 
 # Strategic scratchpad
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
@@ -113,4 +113,7 @@ TODO: wgsl shader cleanup
                 to be exposed, right now we have very simple values but in future there may be cases
                 where deep copying doesnt make sense
                 - Also reduces copying which is nice, we already have easy access to wasm memory 
+             - PLEASE PLEASE PLEASE do not try and work on a generalized zig->js type converter until 
+             we need it
              
+    - Vite looks useful & chill - should we use? eval

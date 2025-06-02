@@ -1,4 +1,5 @@
 name = "mermaid-static"
+compatibility_date = "2025-06-02"
 
 [assets]
 directory = "./static"    

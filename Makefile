@@ -1,9 +1,15 @@
 .PHONY: build clean dev deploy
 
-build: build-wasm build-ts
 
-build-wasm:
-	zig build -Doptimize=ReleaseSmall
+dev: dev-compiler
 
-build-ts:
-	tsc
+dev-compiler:
+	cd compiler; zig build --prefix-exe-dir ../../app/src/assets
+
+build: build-compiler build-app
+
+build-compiler:
+	cd compiler; zig build --prefix-exe-dir ../../app/src/assets -Doptimize=ReleaseSmall
+
+build-app:
+	cd app; npm run build

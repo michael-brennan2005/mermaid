@@ -44,16 +44,13 @@ TODO (DONE): Refactor script.ts, give compute and render pipeline their own stru
 TODO (DONE): Proper UI and connect input to compilation
 TODO (DONE): code quality - zig->js encoding cleanup
 TODO (DONE): implement the rest of the interval math in shader
-
-Tier 0.5 issues (get this deployed)
-TODO: error handling
-TODO: deploy this on your site
+TODO (DONE): error handling
+TODO (DONE): deploy this on your site
 
 Tier 1 issues (road to v2)
 
-TODO: figure out uniforms, storing image width/height, scale, etc.
 TODO: camera implementation/setting up a more legitimate render pass
-
+TODO: re-hook up error messages, as well as webgpu not supported
 
 Tier 2 issues
 TODO: 3d support
@@ -83,6 +80,8 @@ TODO: constants - like PI (may be unneccessary with variable bindings lowkey)
 TODO: wgsl shader cleanup
 TODO: line and column info for errors
 TODO: get a proper hot reloading dev setup, single command and stuff
+TODO: phone support
+    - Does any phone browser even haave webgpu support
 
 # Strategic scratchpad
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 

@@ -82,6 +82,7 @@ TODO: profile, profile, profile
 TODO: constants - like PI (may be unneccessary with variable bindings lowkey)
 TODO: wgsl shader cleanup
 TODO: line and column info for errors
+TODO: get a proper hot reloading dev setup, single command and stuff
 
 # Strategic scratchpad
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
@@ -117,3 +118,6 @@ TODO: line and column info for errors
              we need it
              
     - Vite looks useful & chill - should we use? eval
+        - Seems v. overkill for now, especially as todolist is mostly Zig & shader stuff, would be
+        worth revisiting once frontend/UI gets fancier
+    - Does the current dircetory layout make sense with all the build files in the same spot

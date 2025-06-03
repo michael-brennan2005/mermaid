@@ -25,7 +25,7 @@ pub const CompilationError = struct {
         const writer = buf.writer();
 
         std.fmt.format(writer, "{s}Error: {s}", .{ @tagName(self.tag), self.msg }) catch {
-            @panic("TODO: handle this");
+            @panic("TODO: handle this!!");
         };
 
         return buf.toOwnedSlice() catch {

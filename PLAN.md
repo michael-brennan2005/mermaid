@@ -1,6 +1,4 @@
 # NOTES
-Important command:
-zig build && python3 -m http.server 8080 -d static/
 
 FINAL grammar:
 expr: term "+" expr | term "-" expr | term
@@ -46,13 +44,13 @@ TODO (DONE): code quality - zig->js encoding cleanup
 TODO (DONE): implement the rest of the interval math in shader
 TODO (DONE): error handling
 TODO (DONE): deploy this on your site
+TODO (DONE): get a proper hot reloading dev setup, single command and stuff
+TODO (DONE): re-hook up error messages, as well as webgpu not supported
 
-Tier 1 issues (road to v2)
-
+## IN FLIGHT 
 TODO: camera implementation/setting up a more legitimate render pass
-TODO: re-hook up error messages, as well as webgpu not supported
 
-Tier 2 issues
+## Tier 2 issues - implement the rest of mpr
 TODO: 3d support
 TODO: subinterval evaluation
     - Need to figure out how the data flow works, how subintervals get stored somewhere, how
@@ -60,9 +58,30 @@ TODO: subinterval evaluation
 TODO: tape pruning
 TODO: code quality - alloc vs gpa for std.mem.Allocator
 
-Tier 3 issues
+## Tier 3 - frontend/ui stuff
 TODO: timings for rendering and parsing
+TODO: phone support
+    - Does any phone browser even haave webgpu support
+
+## Tier 3 - Compiler stuff
 TODO: support numbers in form of ".32"
+TODO: let variable bindings, proper scripting language vibe
+TODO: constants - like PI (may be unneccessary with variable bindings lowkey)
+TODO: line and column info for errors
+
+## Tier 3 - Refactor stuff
+TODO: rework how webgpu stuff is organized
+    - Like how oceanman is organized w/ central renderer struct that holds data, has functions
+    for doing a full pass (that calls into subpasses), etc.
+    - Also atp WASM and WebGPU stuff are completely seperated - wasm is compiler and compiler only, so take that into account
+    - Something nice would be to centralize bindgroup/bindgroup layout stuff, make it independent of passes - BindGroupManager
+    - Shaders need their own folder sorry bud
+    
+TODO: profile, profile, profile
+    - why does parsing take so long
+    - creating new buffer for every new tape seems like a lot of overhead, investigate/maybe replace with fixed size buffer or something
+        - Idea could be if new buffer size > old buffer resize, otherwise reuse old buffer, introduce uniform to track tapelength
+TODO: better webgpu labels
 TODO: Cleaning up parsing
     - Token.Op -> Opcode functoins (fromFunc1 and fromFunc2) seem icky, maybe make more sense for one
     function that handles args, constants, binops, etc. Token -> Opcode
@@ -70,18 +89,7 @@ TODO: Cleaning up parsing
     but ops are not (diff. precedence levels). Would eliminate need for advanceIfOp function
     - Can SSA just be given the tokenization iterator instead of a full slice of tokens
 TODO: Prickly OCD thing but shader uses hex opcodes whereas frontend Type.Opcode uses decimal opcodes
-TODO: let variable bindings, proper scripting language vibe
-TODO: better webgpu labels
-TODO: profile, profile, profile
-    - why does parsing take so long
-    - creating new buffer for every new tape seems like a lot of overhead, investigate/maybe replace with fixed size buffer or something
-        - Idea could be if new buffer size > old buffer resize, otherwise reuse old buffer, introduce uniform to track tapelength
-TODO: constants - like PI (may be unneccessary with variable bindings lowkey)
 TODO: wgsl shader cleanup
-TODO: line and column info for errors
-TODO: get a proper hot reloading dev setup, single command and stuff
-TODO: phone support
-    - Does any phone browser even haave webgpu support
 
 # Strategic scratchpad
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
@@ -115,8 +123,3 @@ TODO: phone support
                 - Also reduces copying which is nice, we already have easy access to wasm memory 
              - PLEASE PLEASE PLEASE do not try and work on a generalized zig->js type converter until 
              we need it
-             
-    - Vite looks useful & chill - should we use? eval
-        - Seems v. overkill for now, especially as todolist is mostly Zig & shader stuff, would be
-        worth revisiting once frontend/UI gets fancier
-    - Does the current dircetory layout make sense with all the build files in the same spot

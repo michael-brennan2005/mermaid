@@ -1,29 +1,50 @@
 <script lang="ts">
     import { onMount } from "svelte";
-    import {
-        ComputePipeline,
-        RenderPipleine,
-        WasmModule,
-        WebGPUState,
-    } from "./render";
+    import { WasmModule }  from "./kernel/wasm";
+    import { WebGPUState } from "./kernel/webgpu"; 
+    import { ComputePipeline } from "./kernel/compute";
+    import { Camera, RenderPipeline } from "./kernel/render";
+    import { mat4, vec3 } from "wgpu-matrix";
 
     // MARK: compilation/rendering
     let initialized = false;
 
     const wasm = new WasmModule();
     const webgpu = new WebGPUState();
-    const compute = new ComputePipeline();
-    const render = new RenderPipleine();
+    let compute: ComputePipeline;
+    let render: RenderPipeline;
+    let camera: Camera;
 
     let canvas: HTMLCanvasElement;
+    let frameId;
 
     onMount(async () => {
         await wasm.init();
         await webgpu.init(canvas);
-        await compute.init(webgpu);
-        await render.init(webgpu, compute.outputTexture);
+
+        camera = new Camera(webgpu);
+
+        compute = new ComputePipeline(webgpu);
+        render = new RenderPipeline(webgpu, camera, compute.outputTexture);
+        
+        const renderLoop = () => {
+            const encoder = webgpu.device.createCommandEncoder({
+                label: "Compute & render encoder",
+            });
+            compute.encode(encoder);
+            render.encode(
+                encoder,
+                camera,
+                webgpu.canvasContext.getCurrentTexture().createView(),
+            );
+            const commandBuffer = encoder.finish();
+            webgpu.device.queue.submit([commandBuffer]);
+
+            frameId = requestAnimationFrame(renderLoop);
+        };
 
         initialized = true;
+        renderLoop();
     });
 
     let userInput = $state("");
@@ -64,16 +85,7 @@
 
             compute.uploadTape(webgpu, wasm.getUint8Array(buf.insts, 0));
 
-            const encoder = webgpu.device.createCommandEncoder({
-                label: "Compute & render encoder",
-            });
-            compute.encode(encoder);
-            render.encode(
-                encoder,
-                webgpu.canvasContext.getCurrentTexture().createView(),
-            );
-            const commandBuffer = encoder.finish();
-            webgpu.device.queue.submit([commandBuffer]);
+            
         }
     });
 
@@ -82,7 +94,8 @@
     let x = 0;
     let y = 0;
 
-    const delta = 0.1;
+    const delta = 0.01;
+    
     const handlePanStart = () => {
         panning = true;
     };
@@ -93,7 +106,19 @@
 
     const handlePan = (event: { movementX: number, movementY: number}) => {
         if (!panning) { return; }
-        console.log(`${event.movementX} | ${event.movementY}`)
+
+        x += event.movementX * delta;
+        y -= event.movementY * delta;
+
+        const view = mat4.lookAt(
+            vec3.create(x, y, 5),
+            vec3.create(x, y, 0),
+            vec3.create(0, 1, 0)
+        );
+        const perspective = mat4.perspective(Math.PI / 4.0, (canvasSize.width / canvasSize.height), 0.1, 10.0);
+
+        camera.setViewMatrix(webgpu, view);
+        camera.setPerspectiveMatrix(webgpu, perspective);
     }
 </script>
 
@@ -113,6 +138,7 @@
             onmousedown={handlePanStart}
             onmouseup={handlePanEnd}
             onmousemove={handlePan}
+            onmouseleave={handlePanEnd}
 
             bind:this={canvas}
             bind:clientHeight={canvasSize.height}

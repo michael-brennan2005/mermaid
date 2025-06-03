@@ -157,8 +157,8 @@ fn main(@builtin(global_invocation_id) id: vec3u) {
 
 // Bounds is interval-space [x1,x2,y1,y2]
 fn fillTile(bounds: vec4<f32>, color: vec4<f32>) {
-    for (var x: u32 = u32(bounds[0] + 32) * 8; x < u32(bounds[1] + 32) * 8; x += 1) {
-        for (var y: u32 = u32(bounds[2] + 32) * 8; y < u32(bounds[3] + 32) * 8; y += 1) {
+    for (var x: u32 = u32(bounds[0] + 32) * 16; x < u32(bounds[1] + 32) * 16; x += 1) {
+        for (var y: u32 = u32(bounds[2] + 32) * 16; y < u32(bounds[3] + 32) * 16; y += 1) {
             textureStore(output, vec2i(i32(x), i32(y)), color);
         }
     }

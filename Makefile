@@ -4,8 +4,11 @@
 dev: dev-compiler
 
 dev-compiler:
-	cd compiler; zig build --prefix-exe-dir ../../app/src/assets
+	cd compiler; zig build --prefix-exe-dir ../../app/src/assets --watch
 
+dev-app:
+	cd app; npm run dev
+	
 build: build-compiler build-app
 
 build-compiler:

@@ -47,7 +47,7 @@
         renderLoop();
     });
 
-    let userInput = $state("");
+    let userInput = $state("x + y");
 
     let canvasSize = $state({
         width: 0,

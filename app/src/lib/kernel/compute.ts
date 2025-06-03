@@ -1,22 +1,82 @@
 import { WebGPUState } from "./webgpu";
 import computeShader from './compute.wgsl?raw';
 
-export class ComputePipeline {
-    tapeBindGroupLayout: GPUBindGroupLayout;
-    outputBindGroupLayout: GPUBindGroupLayout;
-
-    tape?: {
-        buffer: GPUBuffer,
-        bindGroup: GPUBindGroup
-    }
-
-    outputTexture: GPUTexture;
-    outputBindGroup: GPUBindGroup;
-
-    pipeline: GPUComputePipeline;
+export class RegionArrays {
+    buffers: GPUBuffer[];
+    bindGroups: GPUBindGroup[];
+    bindGroupLayout: GPUBindGroupLayout;
 
     constructor(gpu: WebGPUState) {
-        this.outputBindGroupLayout = gpu.device.createBindGroupLayout({
+        // 2 intervals, 2 f32s each => 16 bytes
+        const regionSize = 16;
+
+        // Each buffer/region array is used both to store regions AND be used in an 
+        // dispatchWorkgroupsIndirect call, hence the 12 bytes instead of just 4
+        this.buffers = [
+            gpu.device.createBuffer({
+                label: "Region array - 1st pass input",
+                size: 12 + regionSize, // u32 for length, one initial region
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            }),
+            gpu.device.createBuffer({
+                label: "Region array - 1st pass output, 2nd pass input",
+                size: 12 + regionSize * (16 * 16), // u32 for length, worst case (16^2) subintervals to evaluate
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            }),
+            gpu.device.createBuffer({
+                label: "Region array - 2nd pass output, 3rd pass input",
+                size: 12 + regionSize * (16 * 16 * 16), // u32 for length, worst case (16^3) subintervals to evaluate,
+                usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
+            }),
+        ];
+
+        this.bindGroupLayout = gpu.device.createBindGroupLayout({
+            label: "Region array bind group layout",
+            entries: [
+                {
+                    binding: 0,
+                    visibility: GPUShaderStage.COMPUTE,
+                    buffer: {
+                        type: "storage"
+                    }
+                },
+            ]
+        });
+
+        this.bindGroups = [];
+        
+        for (const buffer of this.buffers) {
+            this.bindGroups.push(gpu.device.createBindGroup({
+                label: `BindGroup for "${buffer.label}"`,
+                layout: this.bindGroupLayout,
+                entries: [
+                    {
+                        binding: 0,
+                        resource: {
+                            buffer: buffer
+                        }
+                    },
+                ],
+            }));
+            
+            gpu.device.queue.writeBuffer(buffer, 4, new Uint32Array([1,1]), 0, 2);
+        }
+    }
+}
+
+export class ComputePipeline {
+    tapeBuffer: GPUBuffer;
+    outputTexture: GPUTexture;
+
+    bindGroup: GPUBindGroup;
+    bindGroupLayout: GPUBindGroupLayout;
+
+    // Initial (first 2) makes subintervals for further evaluation, final pass does not
+    pipelineInitial: GPUComputePipeline;
+    pipelineFinal: GPUComputePipeline;
+
+    constructor(gpu: WebGPUState) {
+        this.bindGroupLayout = gpu.device.createBindGroupLayout({
             label: "Compute bind group layout - output",
             entries: [
                 {
@@ -27,21 +87,25 @@ export class ComputePipeline {
                         access: "write-only",
                         viewDimension: "2d"
                     }
-                }
-            ]
-        });
-
-        this.tapeBindGroupLayout = gpu.device.createBindGroupLayout({
-            label: "Compute bind group layout - tape",
-            entries: [
+                },
                 {
-                    binding: 0,
+                    binding: 1,
                     visibility: GPUShaderStage.COMPUTE,
                     buffer: {
                         type: "read-only-storage"
                     }
                 },
             ]
+        });
+
+
+        const MAX_INSTS = 100000;
+
+        this.tapeBuffer = gpu.device.createBuffer({
+            label: `Tape buffer`,
+            // 4 bytes for tape length, (MAX_INSTS * 8) bytes for instructions
+            size: 4 + (MAX_INSTS * 8),
+            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
         });
 
         const OUTPUT_TEXTURE_SIZE = {
@@ -56,85 +120,97 @@ export class ComputePipeline {
             usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING
         });
 
-        this.outputBindGroup = gpu.device.createBindGroup({
-            label: "Compute bind group - output",
-            layout: this.outputBindGroupLayout,
+        this.bindGroup = gpu.device.createBindGroup({
+            label: "Compute bind group",
+            layout: this.bindGroupLayout,
             entries: [
                 {
                     binding: 0,
                     resource: this.outputTexture.createView({
                         dimension: "2d",
                     })
-                }
-            ]
-        });
-
-        this.pipeline = gpu.device.createComputePipeline({
-            label: "Compute pipeline",
-            layout: gpu.device.createPipelineLayout({
-                bindGroupLayouts: [this.outputBindGroupLayout, this.tapeBindGroupLayout]
-            }),
-            compute: {
-                module: gpu.device.createShaderModule({
-                    code: computeShader
-                })
-            },
-        });
-    }
-
-    uploadTape(gpu: WebGPUState, tapeBuf: Uint8Array) {
-        if (this.tape) {
-            this.tape.buffer.destroy();
-            // TODO: do we need to destroy bindgroup or is that simple GC'd
-
-            this.tape = undefined;
-        }
-
-        const buffer = gpu.device.createBuffer({
-            label: `Tape buffer ${Date.now().toString(16)}-${Math.floor(Math.random() * 1e8).toString(16)}`,
-            size: tapeBuf.length,
-            usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST
-        });
-
-        console.log('About to write:', {
-            bufferLabel: buffer.label,
-            bufferSize: buffer.size,
-            dataLength: tapeBuf.length,
-            dataOffset: tapeBuf.byteOffset,
-            firstBytes: Array.from(tapeBuf.slice(0, 4))
-        });
-
-        gpu.device.queue.writeBuffer(buffer, 0, tapeBuf.buffer, tapeBuf.byteOffset, tapeBuf.length);
-
-        const bindGroup = gpu.device.createBindGroup({
-            label: "Compute bind group - tape",
-            layout: this.tapeBindGroupLayout,
-            entries: [
+                },
                 {
-                    binding: 0,
+                    binding: 1,
                     resource: {
-                        buffer: buffer
+                        buffer: this.tapeBuffer
                     }
                 },
             ]
         });
 
-        this.tape = {
-            bindGroup,
-            buffer
-        };
+        this.pipelineInitial = gpu.device.createComputePipeline({
+            label: "Compute pipeline - initial",
+            layout: gpu.device.createPipelineLayout({
+                bindGroupLayouts: [this.bindGroupLayout]
+            }),
+            compute: {
+                module: gpu.device.createShaderModule({
+                    code: computeShader
+                }),
+                constants: {
+                    // @ts-ignore
+                    output_subinterval: true
+                }
+            },
+        });
+
+        this.pipelineFinal = gpu.device.createComputePipeline({
+            label: "Compute pipeline - final",
+            layout: gpu.device.createPipelineLayout({
+                bindGroupLayouts: [this.bindGroupLayout]
+            }),
+            compute: {
+                module: gpu.device.createShaderModule({
+                    code: computeShader
+                }),
+                constants: {
+                    // @ts-ignore
+                    output_subinterval: false
+                }
+            },
+        });
     }
 
-    encode(encoder: GPUCommandEncoder) {
-        if (this.tape === undefined) {
-            return; // cant throw an error because of how the current component logic is (TODO: this should also be handled lowk)
-        }
+    uploadTape(gpu: WebGPUState, newTape: Uint8Array) {
+        const tapeLength = newTape.length / 8;
 
+        console.log('About to write:', {
+            bufferLabel: this.tapeBuffer.label,
+            bufferSize: this.tapeBuffer.size,
+            dataLength: newTape.length,
+            dataOffset: newTape.byteOffset,
+            firstBytes: Array.from(newTape.slice(0, 4))
+        });
+
+        console.log(`New tape length: ${tapeLength}`);
+        
+        gpu.device.queue.writeBuffer(this.tapeBuffer, 0, new Uint32Array([tapeLength]), 0, 1);
+        gpu.device.queue.writeBuffer(this.tapeBuffer, 4, newTape.buffer, newTape.byteOffset, newTape.length);
+    }
+
+    encode(encoder: GPUCommandEncoder, regionArrays: RegionArrays) {
         const pass = encoder.beginComputePass({ label: "Compute pass" });
-        pass.setPipeline(this.pipeline);
-        pass.setBindGroup(0, this.outputBindGroup);
-        pass.setBindGroup(1, this.tape.bindGroup);
-        pass.dispatchWorkgroups(64, 64);
+        pass.setBindGroup(0, this.bindGroup);
+        
+        
+        // First pass
+        pass.setPipeline(this.pipelineInitial);
+        pass.setBindGroup(1, regionArrays.bindGroups[0]);
+        pass.setBindGroup(2, regionArrays.bindGroups[1]);
+        pass.dispatchWorkgroups(1);
+
+        // Second pass
+        pass.setBindGroup(1, regionArrays.bindGroups[1]);
+        pass.setBindGroup(2, regionArrays.bindGroups[2]);
+        pass.dispatchWorkgroupsIndirect(regionArrays.buffers[1], 0);
+
+        // Third pass
+        pass.setPipeline(this.pipelineFinal);
+        pass.setBindGroup(1, regionArrays.bindGroups[2]);
+        pass.setBindGroup(2, regionArrays.bindGroups[0]); // wont be modified because of different pipeline
+        pass.dispatchWorkgroupsIndirect(regionArrays.buffers[2], 0);
+        
         pass.end();
     }
 }

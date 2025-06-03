@@ -46,42 +46,35 @@ TODO (DONE): error handling
 TODO (DONE): deploy this on your site
 TODO (DONE): get a proper hot reloading dev setup, single command and stuff
 TODO (DONE): re-hook up error messages, as well as webgpu not supported
+TODO (DONE): camera implementation/setting up a more legitimate render pass
 
-## IN FLIGHT 
-TODO: camera implementation/setting up a more legitimate render pass
-
-## Tier 2 issues - implement the rest of mpr
-TODO: 3d support
+## TODO - implement the rest of mpr
 TODO: subinterval evaluation
-    - Need to figure out how the data flow works, how subintervals get stored somewhere, how
-    subsequent dispatch call works
+TODO: 3d support
 TODO: tape pruning
-TODO: code quality - alloc vs gpa for std.mem.Allocator
 
-## Tier 3 - frontend/ui stuff
-TODO: timings for rendering and parsing
-TODO: phone support
-    - Does any phone browser even haave webgpu support
-
-## Tier 3 - Compiler stuff
-TODO: support numbers in form of ".32"
-TODO: let variable bindings, proper scripting language vibe
-TODO: constants - like PI (may be unneccessary with variable bindings lowkey)
-TODO: line and column info for errors
-
-## Tier 3 - Refactor stuff
+## TODO - renderer/ts
 TODO: rework how webgpu stuff is organized
     - Like how oceanman is organized w/ central renderer struct that holds data, has functions
     for doing a full pass (that calls into subpasses), etc.
     - Also atp WASM and WebGPU stuff are completely seperated - wasm is compiler and compiler only, so take that into account
     - Something nice would be to centralize bindgroup/bindgroup layout stuff, make it independent of passes - BindGroupManager
     - Shaders need their own folder sorry bud
-    
+TODO: better webgpu labels
+TODO: wgsl shader cleanup
+TODO: timings for rendering and parsing
+TODO: phone support
+    - Does any phone browser even haave webgpu support
+
+## TODO - compiler/zig
+TODO: support numbers in form of ".32"
+TODO: let variable bindings, proper scripting language vibe
+TODO: constants - like PI (may be unneccessary with variable bindings lowkey)
+TODO: line and column info for errors
 TODO: profile, profile, profile
     - why does parsing take so long
     - creating new buffer for every new tape seems like a lot of overhead, investigate/maybe replace with fixed size buffer or something
         - Idea could be if new buffer size > old buffer resize, otherwise reuse old buffer, introduce uniform to track tapelength
-TODO: better webgpu labels
 TODO: Cleaning up parsing
     - Token.Op -> Opcode functoins (fromFunc1 and fromFunc2) seem icky, maybe make more sense for one
     function that handles args, constants, binops, etc. Token -> Opcode
@@ -89,7 +82,7 @@ TODO: Cleaning up parsing
     but ops are not (diff. precedence levels). Would eliminate need for advanceIfOp function
     - Can SSA just be given the tokenization iterator instead of a full slice of tokens
 TODO: Prickly OCD thing but shader uses hex opcodes whereas frontend Type.Opcode uses decimal opcodes
-TODO: wgsl shader cleanup
+TODO: code quality - alloc vs gpa for std.mem.Allocator
 
 # Strategic scratchpad
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
@@ -123,3 +116,37 @@ TODO: wgsl shader cleanup
                 - Also reduces copying which is nice, we already have easy access to wasm memory 
              - PLEASE PLEASE PLEASE do not try and work on a generalized zig->js type converter until 
              we need it
+    
+    - Subinterval eval
+        - Big list for ActiveTiles, atomic integer allows individual compute calls to do their thing
+        - There's indirect buffer workgroup dispatching (buffer determines x,y,z) may be to our
+        advantage here
+        - IDEA: Shader is built for 64x64 interval evaluations, every time, BUT, unlike now, a bindgroup
+        passes in what the total region is.
+        - Compute shader
+            - I am not properly understanding how workgroups and dispatch workgroups run
+                - We need a 64x64 workgroup!!!
+                - Then the dispatch workgroups would be (1,1,1) for our first run, (activeTiles.len, 1, 1) for our second, (activeSubtiles.len, 1, 1) for our third
+                - How does each shader call get its interval to evaluate?
+                    - Use the dispatchWorkgroups(x,y,z) X id to index an intervalsList, use workgroup_id (is that a thing) to get the subinterval from that
+            - Bind group needs two array<Interval> - one input (that shader is using to figure out the interval to eval), one output (to push to in case subinterval needs to be eval'd)
+
+    - We desperately need configurable resolution
+        - 256 compute limit means we are always evaluating 16x16 region
+        - Do we need something that like tells us how many texels map to a unit in "interval-space"
+        
+
+    - PLAN FOR TMR (6-4-2025):
+        - gpu code is dogshit and i refuse to try and debug with how it currently is laid out
+        - webgpu refactor plan
+            - need a high level Renderer object that abstracts all state, clean API for Svelte component/frontend
+                - Should replace WebGPUState, constructors for resources + passes can just get device and queue passed in its nicer that way
+            - Get with program and give each class its own file with a default export
+            - All resources get their own classes, they can own & instantiate their bindgrouplayouts
+                - Camera is good
+                - RegionArrays is (probably) good
+                - Give Tape + output texture its own class
+                    - This will need 2 bind group/layout pairs - one for compute (Tape + Output texture), one for render (output texture)
+            - Render and compute passes are good, just remove resource stuff.
+        - Start testing subinterval eval - probably a good idea to disable current render loop and have a button that does one full pass, so its easy to capture & debug
+        - Clean up svelte code, not sure if this is better to do before or after testing subinterval eval

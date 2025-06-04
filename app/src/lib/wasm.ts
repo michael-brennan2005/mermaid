@@ -1,4 +1,4 @@
-import initWasm from '../../assets/mermaid.wasm?init';
+import initWasm from '../assets/mermaid.wasm?init';
 
 export type Span = {
     ptr: number,
@@ -19,35 +19,37 @@ export class WasmModule {
         compile: (ptr: number, len: number) => number;
     }
 
-    // No async constructors :(
-    async init() {
+    private constructor() {}
+
+    static async init(): Promise<WasmModule> {
+        const module = new WasmModule();
+
         const env = {
             __stack_pointer: 0,
-            memory: this.memory,
+            memory: module.memory,
             consoleLog: (ptr: number, len: number) => {
-                console.log(`[ZIG] ${this.getString({ len, ptr })}`);
+                console.log(`[ZIG] ${module.getString({ len, ptr })}`);
             },
         };
 
         try {
-            this.instance = await initWasm({
+            module.instance = await initWasm({
                 env
             });
 
-            this.exports = {
+            module.exports = {
                 // @ts-ignore
-                free: this.instance.exports.free,
+                free: module.instance.exports.free,
                 // @ts-ignore
-                allocate: this.instance.exports.allocate,
+                allocate: module.instance.exports.allocate,
                 // @ts-ignore
-                compile: this.instance.exports.compile,
+                compile: module.instance.exports.compile,
             }
 
+            return module;
         } catch (e: any) {
-            console.error(`WASM loading failed: ${e.message}`);
+            throw Error(`WASM loading failed: ${e.message}`);
         }
-
-        console.log("WASM module loaded");
     }
 
     free(span: Span) {

@@ -88,11 +88,23 @@ TODO: code quality - alloc vs gpa for std.mem.Allocator
 # Strategic scratchpad - stuff im working on rn
 
 - We desperately need configurable resolution
+    - KISS: maybe keep canvas to a square right now, have fixed output texture?
+
     - 256 compute limit means we are always evaluating 16x16 region
     - RegionArrays should be configurable too, our region subdivisions, how many levels it goes, etc.
         - Dynamic-ify the whole process, how many levels of subevaluation goes on, etc.
+            - Could have it so you keep adding levels so long as (subinterval_count) < total pixels in output texture
     - Do we need something that like tells us how many texels map to a unit in "interval-space"
     - I think this could better be summed up as "eliminate magic numbers"
+    - Paper has interesting idea in that there really isnt a camera, rather the region that gets
+    evaluated is shifted
+        - Idea could be the output texture from compute always matches size of canvas, camera modifies size of initial region (zooming) and origin (panning) 
+
+- IF we hit the maxComputeWorkgroupsPerDimension limit, we could probably rework our compute 3d to not just be a 1d pass, like how 2d is
+    - Looks like for 3D resources can be either 3D or 2D (take in surface type in constructor), pass is different (and so is shader)
+- Code quality: Have passes check the surface types of resources, simple sanity thing
+- Code quality: shader "importing" - use JS string interop
+- HIGH KEY feel that rendering should be organized on 2d/3d lines
 
 # Strategic scratchpad - archive
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 

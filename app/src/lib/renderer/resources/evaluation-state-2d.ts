@@ -1,8 +1,10 @@
+import type { SurfaceType } from "..";
+
 // Could lowkey use a better name - this is the insturction tape and output texture
-export class EvaluationState {
+export class EvaluationState2D {
     tapeBuffer: GPUBuffer;
     outputTexture: GPUTexture;
-
+        
     // Render bind group - just output texture
     // Compute bind group - instruction tape and output texture
     render: {
@@ -30,10 +32,12 @@ export class EvaluationState {
             height: 1024
         };
 
+        const outputFormat: GPUTextureFormat = "rgba8unorm";
+
         this.outputTexture = device.createTexture({
             label: "EvaluationState - output texture",
             size: [OUTPUT_TEXTURE_SIZE.width, OUTPUT_TEXTURE_SIZE.height],
-            format: 'rgba8unorm',
+            format: outputFormat,
             usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING | GPUTextureUsage.STORAGE_BINDING
         });
         
@@ -73,7 +77,7 @@ export class EvaluationState {
                     binding: 0,
                     visibility: GPUShaderStage.COMPUTE,
                     storageTexture: {
-                        format: "rgba8unorm",
+                        format: outputFormat,
                         access: "write-only",
                         viewDimension: "2d"
                     }
@@ -129,4 +133,4 @@ export class EvaluationState {
     }
 }
 
-export default EvaluationState;
+export default EvaluationState2D;

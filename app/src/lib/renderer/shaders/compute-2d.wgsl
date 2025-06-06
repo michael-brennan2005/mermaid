@@ -120,67 +120,70 @@ fn main(
         let imm = bitcast<f32>(tape.insts[clause + 1]);
 
         switch (op) {
-            case 0x0: {
+            case 0: {
                 regs[out] = Interval(imm, imm);
             }
-            case 0x1: {
+            case 1: {
                 regs[out] = x;
             }
-            case 0x2: {
+            case 2: {
                 regs[out] = y;
             }
-            case 0x3: {
+            case 3: {
+                regs[out] = Interval(0.0,0.0);
+            }
+            case 4: {
                 regs[out] = Interval(
                     regs[in1].min + regs[in2].min, 
                     regs[in1].max + regs[in2].max);
             }
-            case 0x4: {
+            case 5: {
                 regs[out] = Interval(
                     regs[in1].min - regs[in2].max,
                     regs[in1].max - regs[in2].min);
             }
-            case 0x5: {
+            case 6: {
                 regs[out] = mul_interval(regs[in1], regs[in2]);
             }
 
-            case 0x6: {
+            case 7: {
                 regs[out] = mul_interval(regs[in1], reciprocal_interval(regs[in2]));
             }
-            case 0x7: {
+            case 8: {
                 regs[out] = Interval(sqrt(regs[in1].min), sqrt(regs[in1].max));
             }
-            case 0x8: {
+            case 9: {
                 regs[out] = sin_interval(regs[in1]);
             }
-            case 0x9: {
+            case 10: {
                 regs[out] = sin_interval(Interval(regs[in1].min + PI/2.0, regs[in1].max + PI/2.0));
             }
-            case 0xA: {
+            case 11: {
                 // asin
             }
-            case 0xB: {
+            case 12: {
                 // acos
             }
-            case 0xC: {
+            case 13: {
                 // atan
             }
-            case 0xD: {
+            case 14: {
                 regs[out] = Interval(exp(regs[in1].min), exp(regs[in1].max));
             }
-            case 0xE: {
+            case 15: {
                 regs[out] = Interval(log(regs[in1].min), log(regs[in1].max));
             }
-            case 0xF: {
+            case 16: {
                 regs[out] = Interval(
                     min(abs(regs[in1].min), abs(regs[in1].max)),
                     max(abs(regs[in1].min), abs(regs[in1].max)));
             }
-            case 0x10: {
+            case 17: {
                 regs[out] = Interval(
                     min(regs[in1].min, regs[in2].min),
                     min(regs[in1].max, regs[in2].max));
             }
-            case 0x11: {
+            case 18: {
                 regs[out] = Interval(
                     max(regs[in1].min, regs[in2].min),
                     max(regs[in1].max, regs[in2].max));

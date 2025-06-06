@@ -41,24 +41,25 @@ pub const Types = struct {
         constant = 0,
         x = 1,
         y = 2,
+        z = 3,
         // reg <- reg [op] reg
-        add = 3,
-        sub = 4,
-        mul = 5,
-        div = 6,
+        add = 4,
+        sub = 5,
+        mul = 6,
+        div = 7,
         // reg <- fn(reg)
-        sqrt = 7,
-        sin = 8,
-        cos = 9,
-        asin = 10,
-        acos = 11,
-        atan = 12,
-        exp = 13,
-        log = 14,
-        abs = 15,
+        sqrt = 8,
+        sin = 9,
+        cos = 10,
+        asin = 11,
+        acos = 12,
+        atan = 13,
+        exp = 14,
+        log = 15,
+        abs = 16,
         // reg <- fn(reg, reg)
-        min = 16,
-        max = 17,
+        min = 17,
+        max = 18,
 
         pub fn fromFunc1(val: Token.Func1) Opcode {
             return switch (val) {
@@ -103,6 +104,10 @@ pub const Types = struct {
             return SSA{ .op = .y };
         }
 
+        pub fn z() SSA {
+            return SSA{ .op = .z };
+        }
+
         pub fn binOp(op: Opcode, lhs: usize, rhs: usize) SSA {
             return SSA{ .op = op, .lhs = lhs, .rhs = rhs };
         }
@@ -129,7 +134,7 @@ pub const Types = struct {
         pub const Op = enum { add, sub, mul, div };
         pub const Func1 = enum { sqrt, sin, cos, asin, acos, atan, exp, log, abs };
         pub const Func2 = enum { min, max };
-        pub const Arg = enum { x, y };
+        pub const Arg = enum { x, y, z };
     };
 };
 
@@ -271,7 +276,7 @@ pub const Tokenizer = struct {
         const map = [_]struct { []const u8, Types.Token }{
             .{ "x", Types.Token{ .arg = Arg.x } },
             .{ "y", Types.Token{ .arg = Arg.y } },
-            // .{ "z", Types.Token{ .arg = Types.Arg.z } },
+            .{ "z", Types.Token{ .arg = Arg.z } },
             .{ "sqrt", Types.Token{ .func1 = Func1.sqrt } },
             .{ "sin", Types.Token{ .func1 = Func1.sin } },
             .{ "cos", Types.Token{ .func1 = Func1.cos } },
@@ -380,6 +385,7 @@ pub const Parser = struct {
             return try self.addInst(switch (arg) {
                 .x => Types.SSA.x(),
                 .y => Types.SSA.y(),
+                .z => Types.SSA.z(),
             });
         }
 

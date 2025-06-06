@@ -1,4 +1,8 @@
+import type { SurfaceType } from "..";
+
 export class RegionArrays {
+    surfaceType: SurfaceType;
+
     buffers: GPUBuffer[];
     
     inputBindGroupLayout: GPUBindGroupLayout;
@@ -7,9 +11,11 @@ export class RegionArrays {
     outputBindGroupLayout: GPUBindGroupLayout;
     outputBindGroups: GPUBindGroup[];
 
-    constructor(device: GPUDevice) {
-        // 2 intervals, 2 f32s each => 16 bytes
-        const regionSize = 16;
+    constructor(device: GPUDevice, surfaceType: SurfaceType) {
+        this.surfaceType = surfaceType;
+        // 2D - 2 intervals, 2 f32s each = 16 bytes
+        // 3D - 3 intervals, 2 f32s each = 24 bytes 
+        const regionSize = surfaceType == "2D" ? 16 : 24;
 
         // We use the length of each RegionArray to make the next workgroup dispatch call through
         // .dispatchWorkgroupsIndirect(); hence the 12 bytes since webgpu expects 3 u32s for (x,y,z)
@@ -21,12 +27,12 @@ export class RegionArrays {
             }),
             device.createBuffer({
                 label: "RegionArrays - 1st pass output, 2nd pass input buffer",
-                size: 12 + regionSize * (16 * 16), // u32 for length, worst case (16^2) subintervals to evaluate
+                size: 12 + regionSize * (surfaceType == "2D" ? (16 * 16) : (6 * 6 * 6)), // u32 for length + worst case # of subintervals to evaluate
                 usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.INDIRECT
             }),
             device.createBuffer({
                 label: "RegionArrays - 2nd pass output, 3rd pass input",
-                size: 12 + regionSize * (16 * 16 * 16), // u32 for length, worst case (16^3) subintervals to evaluate,
+                size: 12 + regionSize * Math.pow((surfaceType == "2D" ? (16 * 16) : (6 * 6 * 6)), 2), // u32 for length + worst case # of subintervals to evaluate
                 usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST | GPUBufferUsage.INDIRECT
             }),
         ];
@@ -91,7 +97,7 @@ export class RegionArrays {
         }
     }
 
-    setInitialRegion(device: GPUDevice, xMin: number, xMax: number, yMin: number, yMax: number) {
+    setInitialRegion(device: GPUDevice, xMin: number, xMax: number, yMin: number, yMax: number, zMin: number, zMax: number) {
         device.queue.writeBuffer(this.buffers[0], 0, new Uint32Array([1,1,1]), 0, 3);
         device.queue.writeBuffer(this.buffers[0], 12, new Float32Array([xMin, xMax, yMin, yMax]), 0, 4);
     }

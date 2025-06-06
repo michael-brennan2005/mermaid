@@ -21,14 +21,16 @@ export class WasmModule {
 
     private constructor() {}
 
-    static async init(): Promise<WasmModule> {
+    static async init(debug: boolean): Promise<WasmModule> {
         const module = new WasmModule();
 
         const env = {
             __stack_pointer: 0,
             memory: module.memory,
             consoleLog: (ptr: number, len: number) => {
-                console.log(`[ZIG] ${module.getString({ len, ptr })}`);
+                if (debug) {
+                    console.log(`[ZIG] ${module.getString({ len, ptr })}`);
+                }
             },
         };
 
@@ -79,7 +81,6 @@ export class WasmModule {
         let type: number = new DataView(this.memory.buffer, addr, 1).getUint8(0)
     
         if (type === 0x0) {
-            console.log("First byte is 0 - success");
             const data = new DataView(this.memory.buffer, addr + 1, 8);
 
             return {
@@ -90,7 +91,6 @@ export class WasmModule {
                 }
             }
         } else {
-            console.log("First byte is 1 - error");
             const data = new DataView(this.memory.buffer, addr + 1, 8);
 
             return {

@@ -2,7 +2,7 @@
     import { onMount } from "svelte";
     import { WasmModule }  from "./wasm";
     import { mat4, vec3 } from "wgpu-matrix";
-    import Renderer from "./renderer";
+    import Renderer from "./renderer/3d";
 
     let initialized = false;
     let canvas: HTMLCanvasElement;
@@ -11,7 +11,7 @@
     let renderer: Renderer;
     
     onMount(async () => {
-        wasm = await WasmModule.init();
+        wasm = await WasmModule.init(false);
         renderer = await Renderer.init(canvas);
         
         initialized = true;
@@ -45,27 +45,28 @@
         
         const buf = wasm.compile(userInput);
         if (buf.type === "error") {
-            console.log(`buf.msg ptr: ${buf.msg.ptr}, len: ${buf.msg.len}`);
-            console.log(
-                `So sad an error got reported ${wasm.getString(buf.msg)}`,
-            );
+            // TODO: real error handling
+            // console.log(`buf.msg ptr: ${buf.msg.ptr}, len: ${buf.msg.len}`);
+            // console.log(
+            //     `So sad an error got reported ${wasm.getString(buf.msg)}`,
+            // );
         } else {
-            console.log(
-                `buf.insts ptr: ${buf.insts.ptr}, len: ${buf.insts.len}`,
-            );
+            // console.log(
+            //     `buf.insts ptr: ${buf.insts.ptr}, len: ${buf.insts.len}`,
+            // );
 
-            const tapeData = wasm.getDataView(buf.insts, 0);
+            // const tapeData = wasm.getDataView(buf.insts, 0);
 
-            for (let i = 0; i < buf.insts.len; i += 8) {
-                const opcode = tapeData.getUint8(i + 3);
-                const output = tapeData.getUint8(i + 2);
-                const rhs = tapeData.getUint8(i + 1);
-                const lhs = tapeData.getUint8(i);
+            // for (let i = 0; i < buf.insts.len; i += 8) {
+            //     const opcode = tapeData.getUint8(i + 3);
+            //     const output = tapeData.getUint8(i + 2);
+            //     const rhs = tapeData.getUint8(i + 1);
+            //     const lhs = tapeData.getUint8(i);
 
-                console.log(
-                    `r${output} = op(${opcode}) r${lhs} r${rhs} (imm: ${tapeData.getFloat32(i + 4, true)})`,
-                );
-            }
+            //     console.log(
+            //         `r${output} = op(${opcode}) r${lhs} r${rhs} (imm: ${tapeData.getFloat32(i + 4, true)})`,
+            //     );
+            // }
 
             renderer.setTape(wasm.getUint8Array(buf.insts, 0));
         }

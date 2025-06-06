@@ -18,7 +18,7 @@ export class Camera {
             entries: [
                 {
                     binding: 0,
-                    visibility: GPUShaderStage.VERTEX,
+                    visibility: GPUShaderStage.VERTEX | GPUShaderStage.COMPUTE,
                     buffer: {
                         type: "uniform",
                         hasDynamicOffset: false,

@@ -31,6 +31,11 @@ struct Tape {
     insts: array<u32>
 }   
 
+struct Camera {
+    view: mat4x4<f32>,
+    perspective: mat4x4<f32>
+}
+
 // MARK: interval functions
 fn sin_interval(int: Interval) -> Interval {
     // return extremes if interval is larger than a full period
@@ -83,30 +88,50 @@ fn reciprocal_interval(int: Interval) -> Interval {
 }
 
 // MARK: compute kernel
-@group(0) @binding(0) var output: texture_storage_2d<rgba8unorm, write>;
-@group(0) @binding(1) var outputLocks: array<array<atomic<u32>, 1024>, 1024>;
-@group(0) @binding(2) var<storage, read> tape: Tape;
+@group(0) @binding(0) var<uniform> camera: Camera;
 
-@group(1) @binding(0) var<storage, read> input_regions: RegionArrayInput;
-@group(2) @binding(0) var<storage, read_write> output_regions: RegionArrayOutput;
+@group(1) @binding(0) var output: texture_storage_2d<r32uint, write>;
+@group(1) @binding(1) var<storage, read_write> outputLocks: array<array<atomic<u32>, 1024>, 1024>;
+@group(1) @binding(2) var<storage, read> tape: Tape;
 
-@compute @workgroup_size(16,16)
+@group(2) @binding(0) var<storage, read> input_regions: RegionArrayInput;
+@group(3) @binding(0) var<storage, read_write> output_regions: RegionArrayOutput;
+
+@compute @workgroup_size(6,6,6)
 fn main(
     @builtin(workgroup_id) input_idx: vec3u, 
     @builtin(local_invocation_id) subinterval: vec3u) {
     var region = input_regions.regions[input_idx.x];
     
-    var x_size = (region.x.max - region.x.min) / 16.0;
-    var y_size = (region.y.max - region.y.min) / 16.0;
+    var size = vec3f(
+        (region.x.max - region.x.min) / 16.0,
+        (region.y.max - region.y.min) / 16.0,
+        (region.z.max - region.z.min) / 16.0
+    );
 
-    var x_min = region.x.min + (x_size * f32(subinterval.x));
-    var x_max = region.x.min + (x_size * (f32(subinterval.x) + 1));
+    var I_min = vec4f(
+        region.x.min + (size.x * f32(subinterval.x)),
+        region.y.min + (size.y * f32(subinterval.y)),
+        region.z.min + (size.z * f32(subinterval.z)),
+        1.0
+    );
 
-    var y_min = region.y.min + (y_size * f32(subinterval.y));
-    var y_max = region.y.min + (y_size * (f32(subinterval.y) + 1));
+    var I_max = vec4f(
+        region.x.min + size.x * (f32(subinterval.x) + 1),
+        region.y.min + size.y * (f32(subinterval.y) + 1),
+        region.z.min + size.z * (f32(subinterval.z) + 1),
+        1.0
+    );
 
-    var x = Interval(x_min, x_max);
-    var y = Interval(y_min, y_max);
+    var I_min_transformed = camera.perspective * camera.view * I_min;
+    I_min_transformed /= I_min_transformed.w;
+
+    var I_max_transformed = camera.perspective * camera.view * I_max;
+    I_max_transformed /= I_max_transformed.w;
+
+    var x = Interval(I_min_transformed.x, I_max_transformed.x);
+    var y = Interval(I_min_transformed.y, I_max_transformed.y);
+    var z = Interval(I_min_transformed.z, I_max_transformed.z);
 
     var regs = array<Interval, 16>();
 
@@ -193,33 +218,36 @@ fn main(
         }
     }
 
-    if (regs[0].max < 0) {
-        fillTile(vec4(x.min, x.max, y.min, y.max), vec4(fill_r, fill_g, fill_b, 1.0));
-    } else if (regs[0].min < 0 && output_subinterval) {
+    fillTile(vec4(x.min, x.max, y.min, y.max), z.max);
+
+    if (regs[0].max > 0 && regs[0].min < 0 && output_subinterval) {
         let idx = atomicAdd(&output_regions.x, 1);
-        output_regions.regions[idx] = Region(x, y);
-    } else {
-        fillTile(vec4(x.min, x.max, y.min, y.max), vec4(0.0,0.0,0.0,1.0));
+        output_regions.regions[idx] = Region(x, y, z);
     }
 }
 
-// Current bounds is +/-16 on X and Y
-// Texture is 1024 x 1024
+fn f32ToU32(val: f32) -> u32 {
+    let bits = bitcast<u32>(val);
+     if (bits & 0x80000000) != 0 {
+        return ~bits;
+    } else {
+        return bits ^ 0x80000000;
+    }
+}
 
-// int(X) -> texel(X)
-// -16 -> 0
-// 16 -> 1024
-// texel(X) = 32 int(x) + 512
+fn fillTile(bounds: vec4<f32>, zVal: f32) {
+    let texSize: vec2<u32> = textureDimensions(output);
 
-fn fillTile(bounds: vec4<f32>, color: vec4<f32>) {
-    let texelMinX = u32(32.0 * bounds[0] + 512.0);
-    let texelMaxX = u32(32.0 * bounds[1] + 512.0);
-    let texelMinY = u32(32.0 * bounds[2] + 512.0);
-    let texelMaxY = u32(32.0 * bounds[3] + 512.0);
+    let x0: u32 = u32(clamp(((bounds.x + 1.0) * 0.5) * f32(texSize.x), 0.0, f32(texSize.x)));
+    let x1: u32 = u32(clamp(((bounds.y + 1.0) * 0.5) * f32(texSize.x), 0.0, f32(texSize.x)));
+    let y0: u32 = u32(clamp(((bounds.z + 1.0) * 0.5) * f32(texSize.y), 0.0, f32(texSize.y)));
+    let y1: u32 = u32(clamp(((bounds.w + 1.0) * 0.5) * f32(texSize.y), 0.0, f32(texSize.y)));
 
-    for (var x: u32 = texelMinX; x < texelMaxX; x += 1) {
-        for (var y: u32 = texelMinY; y < texelMaxY; y += 1) {
-            textureStore(output, vec2i(i32(x), i32(y)), color);
+    let val = f32ToU32(zVal);
+
+    for (var x: u32 = x0; x < x1; x += 1) {
+        for (var y: u32 = y0; y < y1; y += 1) {
+            atomicMax(&outputLocks[y][x], val);        
         }
     }
 }

@@ -105,7 +105,8 @@ TODO: code quality - alloc vs gpa for std.mem.Allocator
 - Code quality: Have passes check the surface types of resources, simple sanity thing
 - Code quality: shader "importing" - use JS string interop
 - HIGH KEY feel that rendering should be organized on 2d/3d lines
-
+    - For now this is a good idea but we should take steps to reduce code duplication
+    
 # Strategic scratchpad - archive
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
         - This means our bindgroup can just be the output image and encoded tape

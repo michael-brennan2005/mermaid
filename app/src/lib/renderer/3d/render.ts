@@ -1,18 +1,20 @@
-import EvaluationState2D from "../resources/evaluation-state-2d";
-import Camera from "../resources/camera";
+import EvaluationState2D from '../2d/evaluation-state';
+import EvaluationState3D from '../3d/evaluation-state';
+import type Camera from '../common/camera';
+import renderShader from './render.wgsl?raw';
 
-import renderShader from '../shaders/render-2d.wgsl?raw';
+type EvaluationState = EvaluationState2D | EvaluationState3D;
 
-export class Render2D {
+export default class Render {
     pipeline: GPURenderPipeline;
     
-    constructor(device: GPUDevice, canvasFormat: GPUTextureFormat, camera: Camera, evaluationState: EvaluationState2D) {
+    constructor(device: GPUDevice, canvasFormat: GPUTextureFormat, camera: Camera, evaluationState: EvaluationState ) {
         const shader = device.createShaderModule({
             code: renderShader
         });
 
         this.pipeline = device.createRenderPipeline({
-            label: "Render2D - pipeline",
+            label: "Render3D - pipeline",
             layout: device.createPipelineLayout({
                 bindGroupLayouts: [
                     evaluationState.render.bindGroupLayout, 
@@ -37,7 +39,7 @@ export class Render2D {
         });
     }
 
-    encode(encoder: GPUCommandEncoder, output: GPUTextureView, camera: Camera, evaluationState: EvaluationState2D) {
+    encode(encoder: GPUCommandEncoder, output: GPUTextureView, camera: Camera, evaluationState: EvaluationState) {
         const renderPass = encoder.beginRenderPass({
             colorAttachments: [
                 {

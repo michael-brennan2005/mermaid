@@ -1,15 +1,11 @@
 import { mat4, vec3, type Mat4 } from "wgpu-matrix";
-import Camera from "./resources/camera";
-import { RegionArrays } from "./resources/region-arrays";
-import EvaluationState2D from "./resources/evaluation-state-2d";
-import Compute2D from "./passes/compute-2d";
-import { Render2D } from "./passes/render-2d";
-import { render } from "svelte/server";
-import type EvaluationState3D from "./resources/evaluation-state-3d";
+import Camera from "../common/camera";
+import RegionArrays from "../common/region-arrays";
+import EvaluationState from "./evaluation-state";
+import Compute from "./compute";
+import Render from "./render";
 
-export type SurfaceType = "3D" | "2D";
-
-export class Renderer {
+export default class Renderer {
     device!: GPUDevice;
     canvas!: {
         element: HTMLCanvasElement;
@@ -19,11 +15,10 @@ export class Renderer {
 
     camera!: Camera;
     regionArrays!: RegionArrays;
-    evaluationState2D!: EvaluationState2D;
-    evaluationState3D!: EvaluationState3D;
+    evaluationState!: EvaluationState;
 
-    compute!: Compute2D;
-    render2D!: Render2D;
+    compute!: Compute;
+    render2D!: Render;
 
     private constructor() { }
 
@@ -59,29 +54,30 @@ export class Renderer {
         ));
         renderer.camera.setPerspectiveMatrix(renderer.device.queue, mat4.perspective(Math.PI / 4.0, (canvas.width / canvas.height), 0.1, 10.0));
 
-        renderer.regionArrays = new RegionArrays(renderer.device, "2D");
-        renderer.evaluationState2D = new EvaluationState2D(renderer.device);
+        renderer.regionArrays = new RegionArrays(renderer.device, "3D");
+        renderer.evaluationState = new EvaluationState(renderer.device);
 
-        renderer.compute = new Compute2D(renderer.device, renderer.regionArrays, renderer.evaluationState2D);
-        renderer.render2D = new Render2D(renderer.device, renderer.canvas.format, renderer.camera, renderer.evaluationState2D);
+        renderer.compute = new Compute(renderer.device, renderer.camera, renderer.regionArrays, renderer.evaluationState);
+        renderer.render2D = new Render(renderer.device, renderer.canvas.format, renderer.camera, renderer.evaluationState);
 
         return renderer;
     }
 
     setTape(buffer: Uint8Array) {
-        this.evaluationState2D.setTape(this.device, buffer);
+        this.evaluationState.setTape(this.device, buffer);
     }
 
     evaluateAndRender() {
         this.regionArrays.clearArrays(this.device);
-        this.regionArrays.setInitialRegion(this.device, -16.0, 16.0, -16.0, 16.0, 0.0, 0.0);
+        this.regionArrays.setInitialRegion(this.device, -16.0, 16.0, -16.0, 16.0, -16.0, 16.0);
         const encoder = this.device.createCommandEncoder({
             label: "Renderer - evaluate command encoder"
         });
 
         this.compute.encode(
             encoder,
-            this.evaluationState2D,
+            this.camera,
+            this.evaluationState,
             this.regionArrays
         );
 
@@ -89,7 +85,7 @@ export class Renderer {
             encoder,
             this.canvas.context.getCurrentTexture().createView({}),
             this.camera,
-            this.evaluationState2D
+            this.evaluationState
         );
 
         const cmds = encoder.finish({
@@ -106,7 +102,8 @@ export class Renderer {
 
         this.compute.encode(
             encoder,
-            this.evaluationState2D,
+            this.camera,
+            this.evaluationState,
             this.regionArrays
         );
 
@@ -147,5 +144,3 @@ export class Renderer {
         }
     }
 }
-
-export default Renderer;

@@ -1,6 +1,6 @@
-import type { SurfaceType } from "..";
+export type SurfaceType = "2D" | "3D";
 
-export class RegionArrays {
+export default class RegionArrays {
     surfaceType: SurfaceType;
 
     buffers: GPUBuffer[];
@@ -100,6 +100,10 @@ export class RegionArrays {
     setInitialRegion(device: GPUDevice, xMin: number, xMax: number, yMin: number, yMax: number, zMin: number, zMax: number) {
         device.queue.writeBuffer(this.buffers[0], 0, new Uint32Array([1,1,1]), 0, 3);
         device.queue.writeBuffer(this.buffers[0], 12, new Float32Array([xMin, xMax, yMin, yMax]), 0, 4);
+        
+        if (this.surfaceType == "3D") {
+            device.queue.writeBuffer(this.buffers[0], 28, new Float32Array([zMin, zMax]), 0, 2);    
+        }
     }
 
     clearArrays(device: GPUDevice) {
@@ -108,5 +112,3 @@ export class RegionArrays {
         }
     }
 }
-
-export default RegionArrays;

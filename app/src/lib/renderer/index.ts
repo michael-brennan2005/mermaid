@@ -1,11 +1,15 @@
 import { mat4, vec3, type Mat4 } from "wgpu-matrix";
-import Camera from "../common/camera";
-import RegionArrays from "../common/region-arrays";
-import EvaluationState from "./evaluation-state";
-import Compute from "./compute";
-import Render from "./render";
+import Camera from "./common/camera";
+import RegionArrays from "./common/region-arrays";
+import EvaluationState from "./common/evaluation-state";
+import Compute2D from "./2d/compute";
+import Compute3D from "./3d/compute";
+import Render from "./common/render";
+import type { SurfaceType } from "./common/surface-type";
 
-export default class Renderer {
+export class Renderer {
+    surfaceType!: SurfaceType;
+
     device!: GPUDevice;
     canvas!: {
         element: HTMLCanvasElement;
@@ -17,15 +21,16 @@ export default class Renderer {
     regionArrays!: RegionArrays;
     evaluationState!: EvaluationState;
 
-    compute!: Compute;
-    render2D!: Render;
+    compute!: { type: "2D", pass: Compute2D } | { type: "3D", pass: Compute3D };
+    render!: Render;
 
     private constructor() { }
 
-    static async init(canvas: HTMLCanvasElement): Promise<Renderer> {
+    static async init(canvas: HTMLCanvasElement, surfaceType: SurfaceType): Promise<Renderer> {
         if (!navigator.gpu) throw Error("navigator.gpu not found");
 
         const renderer = new Renderer();
+        renderer.surfaceType = surfaceType;
 
         const adapter = await navigator.gpu.requestAdapter();
         if (!adapter) throw Error("Couldn't get WebGPU adapater");
@@ -54,11 +59,16 @@ export default class Renderer {
         ));
         renderer.camera.setPerspectiveMatrix(renderer.device.queue, mat4.perspective(Math.PI / 4.0, (canvas.width / canvas.height), 0.1, 10.0));
 
-        renderer.regionArrays = new RegionArrays(renderer.device, "3D");
-        renderer.evaluationState = new EvaluationState(renderer.device);
+        renderer.regionArrays = new RegionArrays(renderer.device, surfaceType);
+        renderer.evaluationState = new EvaluationState(renderer.device, surfaceType);
 
-        renderer.compute = new Compute(renderer.device, renderer.camera, renderer.regionArrays, renderer.evaluationState);
-        renderer.render2D = new Render(renderer.device, renderer.canvas.format, renderer.camera, renderer.evaluationState);
+        if (surfaceType == "2D") {
+            renderer.compute = { type: "2D", pass: new Compute2D(renderer.device, renderer.regionArrays, renderer.evaluationState) };
+        } else {
+            renderer.compute = { type: "3D", pass: new Compute3D(renderer.device, renderer.camera, renderer.regionArrays, renderer.evaluationState) };
+        }
+
+        renderer.render = new Render(renderer.device, surfaceType, renderer.canvas.format, renderer.camera, renderer.evaluationState);
 
         return renderer;
     }
@@ -69,19 +79,33 @@ export default class Renderer {
 
     evaluateAndRender() {
         this.regionArrays.clearArrays(this.device);
-        this.regionArrays.setInitialRegion(this.device, -16.0, 16.0, -16.0, 16.0, -16.0, 16.0);
+
+        if (this.surfaceType == "2D") {
+            this.regionArrays.setInitialRegion(this.device, -16.0, 16.0, -16.0, 16.0, 0.0, 0.0);
+        } else {
+            this.regionArrays.setInitialRegion(this.device, -16.0, 16.0, -16.0, 16.0, -16.0, 16.0);
+        }
+
         const encoder = this.device.createCommandEncoder({
             label: "Renderer - evaluate command encoder"
         });
 
-        this.compute.encode(
-            encoder,
-            this.camera,
-            this.evaluationState,
-            this.regionArrays
-        );
+        if (this.compute.type == "2D") {
+            this.compute.pass.encode(
+                encoder,
+                this.evaluationState,
+                this.regionArrays
+            );
+        } else {
+            this.compute.pass.encode(
+                encoder,
+                this.camera,
+                this.evaluationState,
+                this.regionArrays
+            );
+        }
 
-        this.render2D.encode(
+        this.render.encode(
             encoder,
             this.canvas.context.getCurrentTexture().createView({}),
             this.camera,
@@ -90,45 +114,6 @@ export default class Renderer {
 
         const cmds = encoder.finish({
             label: "Renderer - evaluate command buffer"
-        });
-
-        this.device.queue.submit([cmds]);
-    }
-
-    evaluate() {
-        const encoder = this.device.createCommandEncoder({
-            label: "Renderer - evaluate command encoder"
-        });
-
-        this.compute.encode(
-            encoder,
-            this.camera,
-            this.evaluationState,
-            this.regionArrays
-        );
-
-        const cmds = encoder.finish({
-            label: "Renderer - evaluate command buffer"
-        });
-
-        this.device.queue.submit([cmds]);
-
-    }
-
-    render() {
-        const encoder = this.device.createCommandEncoder({
-            label: "Renderer - render command encoder"
-        });
-
-        this.render2D.encode(
-            encoder,
-            this.canvas.context.getCurrentTexture().createView({}),
-            this.camera,
-            this.evaluationState
-        );
-
-        const cmds = encoder.finish({
-            label: "Renderer - render command buffer"
         });
 
         this.device.queue.submit([cmds]);
@@ -144,3 +129,5 @@ export default class Renderer {
         }
     }
 }
+
+export default Renderer;

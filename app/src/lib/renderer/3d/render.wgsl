@@ -1,3 +1,5 @@
+// IMPORT utils.wgsl!!!
+
 struct Uniforms {
     view: mat4x4<f32>,
     perspective: mat4x4<f32>
@@ -23,17 +25,9 @@ fn vs_main(@builtin(vertex_index) VertexIndex : u32) -> VertexOutput {
     );
     
     var out: VertexOutput;
-    out.clip_space_position = uniforms.perspective * uniforms.view * pos[VertexIndex];
+    out.clip_space_position = pos[VertexIndex];
     out.uv = (pos[VertexIndex].xy * 0.5) + 0.5;
     return out;
-}
-
-fn u32ToF32(val: u32) -> f32 {
-    if (val < 0x80000000) {
-        return bitcast<f32>(~val);
-    } else {
-        return bitcast<f32>(val ^ 0x80000000);
-    }
 }
 
 @fragment

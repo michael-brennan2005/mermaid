@@ -2,7 +2,9 @@
     import { onMount } from "svelte";
     import { WasmModule }  from "./wasm";
     import { mat4, vec3 } from "wgpu-matrix";
-    import Renderer from "./renderer/3d";
+    import Renderer from "./renderer";
+
+    const surfaceType = "3D";
 
     let initialized = false;
     let canvas: HTMLCanvasElement;
@@ -12,7 +14,7 @@
     
     onMount(async () => {
         wasm = await WasmModule.init(false);
-        renderer = await Renderer.init(canvas);
+        renderer = await Renderer.init(canvas, surfaceType);
         
         initialized = true;
 
@@ -32,12 +34,6 @@
     let canvasSize = $state({
         width: 0,
         height: 0,
-    });
-
-    const render = (() => {
-        if (!initialized) { return; }
-        
-        renderer.render();
     });
 
     const compile = (() => {
@@ -74,11 +70,7 @@
 
     // MARK: camera stuff
     let panning = false;
-    let x = 0;
-    let y = 0;
 
-    const delta = 0.01;
-    
     const handlePanStart = () => {
         panning = true;
     };
@@ -87,21 +79,72 @@
         panning = false;
     }
 
+    type CameraState = {
+        type: "2D",
+        x: number,
+        y: number,
+        delta: number
+    } | {
+        type: "3D",
+        rotationY: number,
+        rotationX: number,
+        radius: number,
+        delta: number
+    };
+
+    let cameraState: CameraState = (surfaceType === "2D") ? {
+        type: "2D",
+        x: 0,
+        y: 0,
+        delta: 0.01
+    } : {
+        // Assuming for now we always want to rotate around (0,0,0)
+        type: "3D",
+        rotationY: 0, // rotation around Y axis
+        rotationX: 0, // rotation around X axis
+        radius: 5,
+        delta: 0.01
+    }
+
     const handlePan = (event: { movementX: number, movementY: number}) => {
         if (!panning) { return; }
         
-        x += event.movementX * delta;
-        y -= event.movementY * delta;
+        if (cameraState.type === "2D") {
+            cameraState.x += event.movementX * cameraState.delta;
+            cameraState.y -= event.movementY * cameraState.delta;
+            
+            const view = mat4.lookAt(
+                vec3.create(cameraState.x, cameraState.y, 5),
+                vec3.create(cameraState.x, cameraState.y, 0),
+                vec3.create(0, 1, 0)
+            );
+            const perspective = mat4.perspective(Math.PI / 4.0, (canvasSize.width / canvasSize.height), 0.1, 10.0);
+            
+            if (!initialized) { return; }
+            renderer.setCamera(view, perspective);
+        } else {
+            cameraState.rotationY += event.movementX * cameraState.delta;
+            cameraState.rotationX -= event.movementY * cameraState.delta;
 
-        const view = mat4.lookAt(
-            vec3.create(x, y, 5),
-            vec3.create(x, y, 0),
-            vec3.create(0, 1, 0)
-        );
-        const perspective = mat4.perspective(Math.PI / 4.0, (canvasSize.width / canvasSize.height), 0.1, 10.0);
+            const camX = cameraState.radius * Math.sin(cameraState.rotationY) * Math.cos(cameraState.rotationX);
+            const camY = cameraState.radius * Math.sin(cameraState.rotationX);
+            const camZ = cameraState.radius * Math.cos(cameraState.rotationY) * Math.cos(cameraState.rotationX);
 
-        if (!initialized) { return; }
-        renderer.setCamera(view, perspective);
+            const eye = vec3.create(camX, camY, camZ);
+            const center = vec3.create(0, 0, 0);
+            const up = vec3.create(0, 1, 0);
+
+            const view = mat4.lookAt(eye, center, up);
+            const perspective = mat4.perspective(
+                Math.PI / 4.0, 
+                (canvasSize.width / canvasSize.height), 
+                0.1, 
+                100.0
+            );
+
+            if (!initialized) { return; }
+            renderer.setCamera(view, perspective);
+        }
     }
 </script>
 

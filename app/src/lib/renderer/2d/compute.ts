@@ -1,6 +1,9 @@
 import type RegionArrays from '../common/region-arrays';
+import type EvaluationState from '../common/evaluation-state';
+
 import computeShader from './compute.wgsl?raw';
-import type EvaluationState from './evaluation-state';
+import intervalsShader from '../common/intervals.wgsl?raw';
+
 
 export default class Compute {
     // Initial (first 2) makes subintervals for further evaluation, final pass does not
@@ -18,7 +21,7 @@ export default class Compute {
             }),
             compute: {
                 module: device.createShaderModule({
-                    code: computeShader
+                    code: `${intervalsShader}\n${computeShader}`
                 }),
                 constants: {
                     // @ts-ignore
@@ -32,6 +35,10 @@ export default class Compute {
     }
 
     constructor(device: GPUDevice, regionArrays: RegionArrays, evaluationState: EvaluationState) {
+        if (evaluationState.surfaceType === "3D") {
+            throw Error("Passed in 3D evaluation state to Compute2D pass");
+        }
+        
         this.pipelines = [];
         this.pipelines.push(Compute.pipeline(device, regionArrays, evaluationState, true, 1.0, 1.0, 1.0));
         this.pipelines.push(Compute.pipeline(device, regionArrays, evaluationState, true, 1.0, 1.0, 1.0));

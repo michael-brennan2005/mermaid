@@ -2,7 +2,10 @@ import type { Camera } from "../common/camera";
 import RegionArrays from "../common/region-arrays";
 
 import computeShader from './compute.wgsl?raw';
-import EvaluationState from "./evaluation-state";
+import utilsShader from '../common/utils.wgsl?raw';
+import intervalsShader from '../common/intervals.wgsl?raw';
+
+import EvaluationState from "../common/evaluation-state";
 
 export default class Compute {
     // Initial (first 2) makes subintervals for further evaluation, final pass does not
@@ -21,7 +24,7 @@ export default class Compute {
             }),
             compute: {
                 module: device.createShaderModule({
-                    code: computeShader
+                    code: `${utilsShader}\n${intervalsShader}\n${computeShader}`
                 }),
                 constants: {
                     // @ts-ignore
@@ -32,6 +35,10 @@ export default class Compute {
     }
 
     constructor(device: GPUDevice, camera: Camera, regionArrays: RegionArrays, evaluationState: EvaluationState) {
+        if (evaluationState.surfaceType === "2D") {
+            throw Error("Passed in 2D evalulation state to Compute3D pass");
+        }
+
         this.pipelines = [];
         this.pipelines.push(Compute.pipeline(device, camera, regionArrays, evaluationState, true));
         this.pipelines.push(Compute.pipeline(device, camera, regionArrays, evaluationState, true));
@@ -71,7 +78,7 @@ export default class Compute {
 
         encoder.copyBufferToTexture(
             {
-                buffer: evaluationState.outputLocksBuffer,
+                buffer: evaluationState.outputLocksBuffer!,
                 offset: 0,
                 bytesPerRow: 1024 * 4, // width in pixels * 4 bytes per pixel
                 rowsPerImage: 1024

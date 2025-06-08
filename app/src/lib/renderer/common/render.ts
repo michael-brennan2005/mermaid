@@ -1,20 +1,24 @@
-import EvaluationState2D from '../2d/evaluation-state';
-import EvaluationState3D from '../3d/evaluation-state';
 import type Camera from '../common/camera';
-import renderShader from './render.wgsl?raw';
+import type EvaluationState from './evaluation-state';
+import type { SurfaceType } from './surface-type';
 
-type EvaluationState = EvaluationState2D | EvaluationState3D;
+import utilsShader from './utils.wgsl?raw';
+import renderShader3D from '../3d/render.wgsl?raw';
+import renderShader2D from '../2d/render.wgsl?raw';
 
 export default class Render {
+    surfaceType: SurfaceType;
     pipeline: GPURenderPipeline;
     
-    constructor(device: GPUDevice, canvasFormat: GPUTextureFormat, camera: Camera, evaluationState: EvaluationState ) {
+    constructor(device: GPUDevice, surfaceType: SurfaceType, canvasFormat: GPUTextureFormat, camera: Camera, evaluationState: EvaluationState ) {
+        this.surfaceType = surfaceType;
+        
         const shader = device.createShaderModule({
-            code: renderShader
+            code: `${utilsShader}\n${surfaceType == "2D" ? renderShader2D : renderShader3D}`
         });
 
         this.pipeline = device.createRenderPipeline({
-            label: "Render3D - pipeline",
+            label: `Render${surfaceType} - pipeline`,
             layout: device.createPipelineLayout({
                 bindGroupLayouts: [
                     evaluationState.render.bindGroupLayout, 

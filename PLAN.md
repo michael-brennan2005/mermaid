@@ -57,6 +57,11 @@ TODO (DONE): subinterval evaluation
 TODO (DONE): better webgpu labels
 TODO (DONE): wgsl shader cleanup
 
+## TODO - ONLY do these things after getting 3d support
+TODO: 2D implementation strat from paper (camera modifies 2d matrix, output texture is always size of canvas)
+TODO: error handling UI
+TODO: UI cleanup - little description, toggle switch for 2D/3D
+
 ## TODO - implement the rest of mpr
 TODO: 3d support
 TODO: tape pruning
@@ -65,7 +70,6 @@ TODO: tape pruning
 TODO: timings for rendering and parsing
 TODO: phone support
     - Does any phone browser even haave webgpu support
-TODO: Make a nice UI 
 
 ## TODO - compiler/zig
 TODO: support numbers in form of ".32"
@@ -102,11 +106,19 @@ TODO: code quality - alloc vs gpa for std.mem.Allocator
 
 - IF we hit the maxComputeWorkgroupsPerDimension limit, we could probably rework our compute 3d to not just be a 1d pass, like how 2d is
     - Looks like for 3D resources can be either 3D or 2D (take in surface type in constructor), pass is different (and so is shader)
-- Code quality: Have passes check the surface types of resources, simple sanity thing
-- Code quality: shader "importing" - use JS string interop
 - HIGH KEY feel that rendering should be organized on 2d/3d lines
     - For now this is a good idea but we should take steps to reduce code duplication
-    
+  
+  - We are lowkey collapsing under the weight of this awful code
+    - (DONE) Shaders: Put interval code in one file, f32/u32 conversions in one file, use string interpolation to make nicer shaders
+    - Common class consolidation
+        - Render
+        - (DONE) EvaluationState
+    - Split Editor for now into Editor2D and Editor3D, and do proper implementation for editor3d
+        - 3d orbital camera, using canvas size as output texture size
+
+- Is minbindingsize for buffer bindings important/necessary for good performance
+
 # Strategic scratchpad - archive
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
         - This means our bindgroup can just be the output image and encoded tape

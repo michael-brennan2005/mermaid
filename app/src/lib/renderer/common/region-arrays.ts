@@ -1,4 +1,5 @@
-export type SurfaceType = "2D" | "3D";
+import { BindGroupBuilder } from "./bind-group-builder";
+import type { SurfaceType } from "./surface-type";
 
 export default class RegionArrays {
     surfaceType: SurfaceType;
@@ -13,6 +14,7 @@ export default class RegionArrays {
 
     constructor(device: GPUDevice, surfaceType: SurfaceType) {
         this.surfaceType = surfaceType;
+
         // 2D - 2 intervals, 2 f32s each = 16 bytes
         // 3D - 3 intervals, 2 f32s each = 24 bytes 
         const regionSize = surfaceType == "2D" ? 16 : 24;
@@ -37,61 +39,28 @@ export default class RegionArrays {
             }),
         ];
 
-        this.inputBindGroupLayout = device.createBindGroupLayout({
-            label: "RegionArrays - input bind group layout",
-            entries: [
-                {
-                    binding: 0,
-                    visibility: GPUShaderStage.COMPUTE,
-                    buffer: {
-                        type: "read-only-storage"
-                    }
-                },
-            ]
-        });
+        this.inputBindGroupLayout = new BindGroupBuilder("RegionArray input")
+            .buffer(this.buffers[0], GPUShaderStage.COMPUTE, "read-only-storage")
+            .buildLayout(device);
+    
 
-        this.outputBindGroupLayout = device.createBindGroupLayout({
-            label: "RegionArrays - output bind group layout",
-            entries: [
-                {
-                    binding: 0,
-                    visibility: GPUShaderStage.COMPUTE,
-                    buffer: {
-                        type: "storage"
-                    }
-                },
-            ]
-        });
+        this.outputBindGroupLayout = new BindGroupBuilder("RegionArray input")
+            .buffer(this.buffers[0], GPUShaderStage.COMPUTE, "storage")
+            .buildLayout(device);
 
         this.inputBindGroups = [];
         this.outputBindGroups = [];
         
         for (const buffer of this.buffers) {
-            this.inputBindGroups.push(device.createBindGroup({
-                label: `RegionArrays - input bind group for "${buffer.label}"`,
-                layout: this.inputBindGroupLayout,
-                entries: [
-                    {
-                        binding: 0,
-                        resource: {
-                            buffer: buffer
-                        }
-                    },
-                ],
-            }));
+            this.inputBindGroups.push(
+                new BindGroupBuilder(`RegionArray input for ${buffer.label}`)
+                    .buffer(buffer, GPUShaderStage.COMPUTE, "read-only-storage")
+                    .buildBindGroup(device, this.inputBindGroupLayout));
             
-            this.outputBindGroups.push(device.createBindGroup({
-                label: `RegionArrays - output bind group for "${buffer.label}"`,
-                layout: this.outputBindGroupLayout,
-                entries: [
-                    {
-                        binding: 0,
-                        resource: {
-                            buffer: buffer
-                        }
-                    },
-                ],
-            }));
+            this.outputBindGroups.push(
+                new BindGroupBuilder(`RegionArray output for ${buffer.label}`)
+                    .buffer(buffer, GPUShaderStage.COMPUTE, "storage")
+                    .buildBindGroup(device, this.outputBindGroupLayout));
             
             device.queue.writeBuffer(buffer, 0, new Uint32Array([1,1,1]), 0, 3);
         }

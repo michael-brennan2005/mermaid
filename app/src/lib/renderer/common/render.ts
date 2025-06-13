@@ -1,4 +1,3 @@
-import type Camera from '../common/camera';
 import type EvaluationState from './evaluation-state';
 import type { SurfaceType } from './surface-type';
 
@@ -10,7 +9,7 @@ export default class Render {
     surfaceType: SurfaceType;
     pipeline: GPURenderPipeline;
     
-    constructor(device: GPUDevice, surfaceType: SurfaceType, canvasFormat: GPUTextureFormat, camera: Camera, evaluationState: EvaluationState ) {
+    constructor(device: GPUDevice, surfaceType: SurfaceType, canvasFormat: GPUTextureFormat, evaluationState: EvaluationState ) {
         this.surfaceType = surfaceType;
         
         const shader = device.createShaderModule({
@@ -21,8 +20,7 @@ export default class Render {
             label: `Render${surfaceType} - pipeline`,
             layout: device.createPipelineLayout({
                 bindGroupLayouts: [
-                    evaluationState.render.bindGroupLayout, 
-                    camera.bindGroupLayout]
+                    evaluationState.render.bindGroupLayout]
             }),
             vertex: {
                 module: shader,
@@ -43,7 +41,7 @@ export default class Render {
         });
     }
 
-    encode(encoder: GPUCommandEncoder, output: GPUTextureView, camera: Camera, evaluationState: EvaluationState) {
+    encode(encoder: GPUCommandEncoder, output: GPUTextureView, evaluationState: EvaluationState) {
         const renderPass = encoder.beginRenderPass({
             colorAttachments: [
                 {
@@ -58,8 +56,7 @@ export default class Render {
         renderPass.setPipeline(this.pipeline);
 
         renderPass.setBindGroup(0, evaluationState.render.bindGroup);
-        renderPass.setBindGroup(1, camera.bindGroup);
-
+        
         renderPass.draw(6, 1, 0, 0); // Draw 2 triangles (6 vertices) for the quad
         renderPass.end();
     }

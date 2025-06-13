@@ -1,5 +1,4 @@
 import { mat4, vec3, type Mat4 } from "wgpu-matrix";
-import Camera from "./common/camera";
 import RegionArrays from "./common/region-arrays";
 import EvaluationState from "./common/evaluation-state";
 import Compute2D from "./2d/compute";
@@ -17,7 +16,6 @@ export class Renderer {
         format: GPUTextureFormat;
     }
 
-    camera!: Camera;
     regionArrays!: RegionArrays;
     evaluationState!: EvaluationState;
 
@@ -51,24 +49,16 @@ export class Renderer {
             format: renderer.canvas.format,
         });
         
-        renderer.camera = new Camera(renderer.device);
-        renderer.camera.setViewMatrix(renderer.device.queue, mat4.lookAt(
-            vec3.create(0, 0, 5),
-            vec3.create(0, 0, 0),
-            vec3.create(0, 1, 0)
-        ));
-        renderer.camera.setPerspectiveMatrix(renderer.device.queue, mat4.perspective(Math.PI / 4.0, (canvas.width / canvas.height), 0.1, 10.0));
-
         renderer.regionArrays = new RegionArrays(renderer.device, surfaceType);
-        renderer.evaluationState = new EvaluationState(renderer.device, surfaceType);
+        renderer.evaluationState = new EvaluationState(renderer.device, surfaceType, renderer.canvas.element);
 
         if (surfaceType == "2D") {
             renderer.compute = { type: "2D", pass: new Compute2D(renderer.device, renderer.regionArrays, renderer.evaluationState) };
         } else {
-            renderer.compute = { type: "3D", pass: new Compute3D(renderer.device, renderer.camera, renderer.regionArrays, renderer.evaluationState) };
+            renderer.compute = { type: "3D", pass: new Compute3D(renderer.device, renderer.regionArrays, renderer.evaluationState) };
         }
 
-        renderer.render = new Render(renderer.device, surfaceType, renderer.canvas.format, renderer.camera, renderer.evaluationState);
+        renderer.render = new Render(renderer.device, surfaceType, renderer.canvas.format, renderer.evaluationState);
 
         return renderer;
     }
@@ -77,11 +67,11 @@ export class Renderer {
         this.evaluationState.setTape(this.device, buffer);
     }
 
-    evaluateAndRender() {
+    evaluateAndRender(width: number, height: number) {
         this.regionArrays.clearArrays(this.device);
 
         if (this.surfaceType == "2D") {
-            this.regionArrays.setInitialRegion(this.device, -16.0, 16.0, -16.0, 16.0, 0.0, 0.0);
+            this.regionArrays.setInitialRegion(this.device, 0.0, width, 0.0, height, 0.0, 0.0);
         } else {
             this.regionArrays.setInitialRegion(this.device, -16.0, 16.0, -16.0, 16.0, -16.0, 16.0);
         }
@@ -99,7 +89,6 @@ export class Renderer {
         } else {
             this.compute.pass.encode(
                 encoder,
-                this.camera,
                 this.evaluationState,
                 this.regionArrays
             );
@@ -108,7 +97,6 @@ export class Renderer {
         this.render.encode(
             encoder,
             this.canvas.context.getCurrentTexture().createView({}),
-            this.camera,
             this.evaluationState
         );
 
@@ -119,14 +107,16 @@ export class Renderer {
         this.device.queue.submit([cmds]);
     }
 
-    setCamera(view?: Mat4, perspective?: Mat4) {
-        if (view) {
-            this.camera.setViewMatrix(this.device.queue, view);
-        }
+    set3DTransform(perspective: Mat4, view: Mat4) {
+        this.evaluationState.set3DTransform(this.device, perspective, view);
+    }
 
-        if (perspective) {
-            this.camera.setPerspectiveMatrix(this.device.queue, perspective);
-        }
+    set2DTransform(scale: number, x: number, y: number) {
+        this.evaluationState.set2DTransform(this.device, scale, x, y);
+    }
+
+    resizeOutputTexture(width: number, height: number) {
+        this.evaluationState.resizeTexture(this.device, width, height);
     }
 }
 

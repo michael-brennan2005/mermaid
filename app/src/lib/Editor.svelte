@@ -4,7 +4,7 @@
     import { mat4, vec3 } from "wgpu-matrix";
     import Renderer from "./renderer";
 
-    const surfaceType = "3D";
+    const surfaceType = "2D";
 
     let initialized = false;
     let canvas: HTMLCanvasElement;
@@ -21,7 +21,7 @@
         // Use requestAnimationFrame for smoother and more efficient updates
         function animationLoop() {
             compile();
-            renderer.evaluateAndRender();
+            renderer.evaluateAndRender(0,0);
             requestAnimationFrame(animationLoop);
         }
 
@@ -34,6 +34,13 @@
     let canvasSize = $state({
         width: 0,
         height: 0,
+    });
+
+    $effect(() => {
+        const { width, height } = canvasSize;
+
+        if (!initialized) return;
+        renderer.resizeOutputTexture(width, height);
     });
 
     const compile = (() => {
@@ -96,7 +103,7 @@
         type: "2D",
         x: 0,
         y: 0,
-        delta: 0.01
+        delta: 5
     } : {
         // Assuming for now we always want to rotate around (0,0,0)
         type: "3D",
@@ -113,15 +120,8 @@
             cameraState.x += event.movementX * cameraState.delta;
             cameraState.y -= event.movementY * cameraState.delta;
             
-            const view = mat4.lookAt(
-                vec3.create(cameraState.x, cameraState.y, 5),
-                vec3.create(cameraState.x, cameraState.y, 0),
-                vec3.create(0, 1, 0)
-            );
-            const perspective = mat4.perspective(Math.PI / 4.0, (canvasSize.width / canvasSize.height), 0.1, 10.0);
-            
             if (!initialized) { return; }
-            renderer.setCamera(view, perspective);
+            renderer.set2DTransform(1.0, cameraState.x, cameraState.y);
         } else {
             cameraState.rotationY += event.movementX * cameraState.delta;
             cameraState.rotationX -= event.movementY * cameraState.delta;
@@ -143,7 +143,7 @@
             );
 
             if (!initialized) { return; }
-            renderer.setCamera(view, perspective);
+            renderer.set3DTransform(view, perspective);
         }
     }
 </script>

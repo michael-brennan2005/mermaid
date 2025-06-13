@@ -1,3 +1,6 @@
+# KEEP YOURSELF SANE
+Please do not refactor the renderer code until after 3d support and tape pruning
+
 # NOTES
 
 FINAL grammar:
@@ -57,7 +60,7 @@ TODO (DONE): subinterval evaluation
 TODO (DONE): better webgpu labels
 TODO (DONE): wgsl shader cleanup
 
-## TODO - ONLY do these things after getting 3d support
+## TODO - Maybe do these things after getting 3d support
 TODO: 2D implementation strat from paper (camera modifies 2d matrix, output texture is always size of canvas)
 TODO: error handling UI
 TODO: UI cleanup - little description, toggle switch for 2D/3D
@@ -91,6 +94,9 @@ TODO: code quality - alloc vs gpa for std.mem.Allocator
 
 # Strategic scratchpad - stuff im working on rn
 
+- 3D shader is now deffo broken because we dont have camera
+    - Also, you could like, radically simplify the code for testing/debugging, comment out a LOT
+
 - We desperately need configurable resolution
     - KISS: maybe keep canvas to a square right now, have fixed output texture?
 
@@ -108,16 +114,15 @@ TODO: code quality - alloc vs gpa for std.mem.Allocator
     - Looks like for 3D resources can be either 3D or 2D (take in surface type in constructor), pass is different (and so is shader)
 - HIGH KEY feel that rendering should be organized on 2d/3d lines
     - For now this is a good idea but we should take steps to reduce code duplication
-  
-  - We are lowkey collapsing under the weight of this awful code
-    - (DONE) Shaders: Put interval code in one file, f32/u32 conversions in one file, use string interpolation to make nicer shaders
-    - Common class consolidation
-        - Render
-        - (DONE) EvaluationState
-    - Split Editor for now into Editor2D and Editor3D, and do proper implementation for editor3d
-        - 3d orbital camera, using canvas size as output texture size
 
 - Is minbindingsize for buffer bindings important/necessary for good performance
+
+- How does the filltexel know how "unit space" maps to "texture space"
+- Thought process, assume 1 unit -> 1 pixel
+    - Region setting becomes x = [0, canvasWidth], y = [0, canvasHeight]
+
+    - Transform still works as normal, just that you're probably going to be zooming in a lot and panning over large distances
+    - But now, to find texel bounds, we just multiply by mat^-1
 
 # Strategic scratchpad - archive
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
@@ -183,3 +188,4 @@ TODO: code quality - alloc vs gpa for std.mem.Allocator
 
     - Can we only compute when equation is changed?
         - May not work for 3d stuff where heightmap is specific to wherever the camera is at, idk
+

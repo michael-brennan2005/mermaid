@@ -124,6 +124,7 @@ TODO: code quality - alloc vs gpa for std.mem.Allocator
     - Transform still works as normal, just that you're probably going to be zooming in a lot and panning over large distances
     - But now, to find texel bounds, we just multiply by mat^-1
 
+
 # Strategic scratchpad - archive
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
         - This means our bindgroup can just be the output image and encoded tape

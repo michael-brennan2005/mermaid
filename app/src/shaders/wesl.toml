@@ -1,0 +1,2 @@
+weslFiles = [ "./**/*.w[eg]sl" ]
+weslRoot = "./"

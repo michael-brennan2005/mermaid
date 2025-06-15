@@ -1,5 +1,3 @@
-const PI = radians(180);
-
 struct Interval {
     min: f32,
     max: f32
@@ -153,62 +151,3 @@ fn evaluate_tape(x: Interval, y: Interval, z: Interval) -> Interval {
 
     return regs[0];
 }
-
-struct Region {
-    x: Interval,
-    y: Interval
-}
-
-struct RegionArrayInput {
-    x: u32,
-    padding: array<u32, 2>,
-    regions: array<Region>
-}
-
-struct RegionArrayOutput {
-    x: atomic<u32>,
-    padding: array<u32, 2>,
-    regions: array<Region>
-}
-
-@group(0) @binding(0) var outputTex: texture_storage_2d<rgba8unorm, write>;
-
-@group(1) @binding(0) var<storage, read> tape: Tape;
-@group(1) @binding(1) var<uniform> transform: mat3x3<f32>;
-
-@group(2) @binding(0) var<storage, read> input_regions: RegionArrayInput;
-@group(2) @binding(1) var<storage, read_write> output_regions: RegionArrayOutput;
-
-@compute @workgroup_size(16, 16)
-fn main(@builtin(workgroup_id) idx: vec3<u32>, @builtin(local_invocation_id) sub_idx: vec3u) {
-    var region = input_regions.regions[idx.x];
-    
-    // size of each subinterval
-    var dX = (region.x.max - region.x.min) / 16.0;
-    var dY = (region.y.max - region.y.min) / 16.0;
-
-    // T - texel space
-    var minT = vec3f(
-        region.x.min + (dX * f32(sub_idx.x)), 
-        region.y.min + (dY * f32(sub_idx.y)), 
-        1.0);
-    
-    var maxT = vec3f(
-        region.x.max + (dX * (f32(sub_idx.x) + 1.0)), 
-        region.y.max + (dY * (f32(sub_idx.y) + 1.0)), 
-        1.0);
-
-    // E - eval space
-    var minE = minT;
-    var maxE = maxT;
-
-    var xE = Interval(minE.x, maxE.x);
-    var yE = Interval(minE.y, maxE.y);
-
-    var output = evaluate_tape(xE, yE, Interval(0.0, 0.0));
-
-    textureStore(outputTex, idx.xy + sub_idx.xy, 
-        vec4f(minE.x, minE.y, maxE.x, maxE.y));
-}
-
-

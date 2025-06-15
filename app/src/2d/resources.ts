@@ -3,7 +3,7 @@ export const DEFAULT_TEXTURE_FORMAT = "rgba8unorm";
 
 export interface BindGroupTemplate {
     [binding: number]: {
-        type: 'storage-texture' | 'uniform-buffer' | 'sampled-texture' | 'sampler';
+        type: 'storage-texture' | 'uniform-buffer' | 'read-only-storage' | 'storage' | 'sampled-texture' | 'sampler';
         access?: 'read' | 'write' | 'read-write';
         format?: string;
         visibility?: GPUShaderStage;
@@ -43,10 +43,26 @@ export class BindGroupManager {
         const key = JSON.stringify(template);
         const layout = this.templateCache.get(key)!;
 
-        const entries = Object.entries(resources).map(([binding, resource]) => ({
-            binding: parseInt(binding),
-            resource
-        }));
+        const entries = Object.entries(resources).map(([binding, resource]) => {
+            const bindingNum = parseInt(binding);
+            const templateEntry = template[bindingNum];
+            
+            let bindingResource: GPUBindingResource;
+            
+            // Check if this is a buffer type and wrap accordingly
+            if (templateEntry.type === 'uniform-buffer' || 
+                templateEntry.type === 'storage' || 
+                templateEntry.type === 'read-only-storage') {
+                bindingResource = { buffer: resource as GPUBuffer };
+            } else {
+                bindingResource = resource as GPUBindingResource;
+            }
+
+            return {
+                binding: bindingNum,
+                resource: bindingResource
+            };
+        });
 
         return this.device.createBindGroup({ layout, entries });
     }
@@ -82,6 +98,10 @@ export class BindGroupManager {
                 };
             case 'uniform-buffer':
                 return { buffer: { type: 'uniform' } };
+            case 'storage':
+                return { buffer: { type: 'storage' } };
+            case 'read-only-storage':
+                return { buffer: { type: 'read-only-storage' } };
             case 'sampled-texture':
                 return { texture: {} };
             case 'sampler':
@@ -127,7 +147,8 @@ export function computePipeline(device: GPUDevice, params: { shader: GPUShaderMo
             bindGroupLayouts: params.layouts
         }),
         compute: {
-            module: params.shader
+            module: params.shader,
+            entryPoint: "main"
         }
     });
 }

@@ -93,6 +93,11 @@ TODO: Prickly OCD thing but shader uses hex opcodes whereas frontend Type.Opcode
 TODO: code quality - alloc vs gpa for std.mem.Allocator
 
 # Strategic scratchpad - stuff im working on rn
+- Refactoring
+    - Do not share any code w/ 2d and 3d - giving myself a month minimum ban from trying to figure out commonalities
+    - Small iterations, always have something working and on-screen
+    
+# Strategic scratchpad - archive
 
 - 3D shader is now deffo broken because we dont have camera
     - Also, you could like, radically simplify the code for testing/debugging, comment out a LOT
@@ -124,8 +129,6 @@ TODO: code quality - alloc vs gpa for std.mem.Allocator
     - Transform still works as normal, just that you're probably going to be zooming in a lot and panning over large distances
     - But now, to find texel bounds, we just multiply by mat^-1
 
-
-# Strategic scratchpad - archive
     - KISS: Just do one 64x64 tile pass, and also no tape pruning. No image transformation either (no camera) 
         - This means our bindgroup can just be the output image and encoded tape
     - KISS: Do webgpu in JS-land, profile & rewrite later usign Zig and making compatibility layer
